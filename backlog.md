@@ -81,6 +81,36 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
   in the terminal, which needs no PAKE and no typing, at the cost of requiring a camera.
 - Key rotation and per-host revocation from the phone.
 
+## Bridge packaging
+
+The bridge is currently a plain executable produced by `swift build`. A command-line binary has
+no TCC identity of its own — it inherits Bluetooth permission from whatever launched it — so it
+works when started from a terminal that has been granted Bluetooth, and not otherwise.
+
+Making it survive a reboot means an `.app` bundle carrying `NSBluetoothAlwaysUsageDescription`,
+marked `LSUIElement` so it stays out of the Dock, started by a LaunchAgent. Until that exists,
+run it from a terminal.
+
+## Swift 6 language mode
+
+The bridge is pinned to Swift 5 language mode. In Swift 6 mode the region-based isolation
+checker fails on the pattern in `HookServer` that hands a channel to a `Task` — with the
+compiler's own "please file a bug" diagnostic, not a fixable diagnostic about our code.
+
+Revisit on a later toolchain. Unrelated but worth doing at the same time: `BLELink` captures
+`self` in a `@Sendable` closure and would need an isolation story of its own.
+
+## Toolchain
+
+`compileSdk` is pinned to 37 minor 1. Android now ships minor-versioned platforms, so the SDK
+package is `platforms;android-37.1` — `platforms;android-37` does not resolve, which is worth
+remembering the next time a build asks for a newer compileSdk.
+
+Separately: the SwiftPM shipped in Command Line Tools 26.6.0 is broken — its
+`libPackageDescription.dylib` exports no `Package` initialisers at all, so no manifest can link.
+The toolchain in use comes from swiftly instead. CI needs a runner with Swift 6.2 or newer,
+since the manifest uses `swiftLanguageMode`.
+
 ## Testing and CI
 
 - Instrumented tests on a physical device. Neither GitHub runners nor the Android emulator
