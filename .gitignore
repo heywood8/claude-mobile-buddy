@@ -1,0 +1,30 @@
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Swift / SPM
+bridge/.build/
+bridge/.swiftpm/
+bridge/*.xcodeproj
+bridge/dist/
+
+# macOS
+.DS_Store
+
+# Secrets and local state
+*.pem
+secrets/
+.env
+.env.*
+
+# Vendored agent skills — reinstall from skills-lock.json
+.agents/
+.claude/skills/
