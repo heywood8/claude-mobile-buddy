@@ -1,69 +1,93 @@
 import Foundation
 
-/// Holds the state the phone renders and arbitrates a single approval at a time.
+/// Whatever carries lines to the phone.
 ///
-/// The walking skeleton keeps one request in flight; a second arriving while the first is
-/// on screen fails open immediately rather than queueing. The FIFO queue and the `waiting`
-/// counter it feeds are the next milestone.
+/// The coordinator only needs to know whether there is a link and how to push a line down it.
+/// Keeping that behind a protocol is what lets the queue be tested without a radio.
+protocol LinkSink: AnyObject, Sendable {
+    var isLinked: Bool { get }
+    func send(_ line: Data)
+}
+
+/// Holds the state the phone renders and arbitrates approvals one at a time.
+///
+/// Requests queue in arrival order; the phone shows the head and a count of what is behind it.
+/// Every request carries its own deadline measured from when it arrived, not from when it
+/// reached the front — see `window`.
 actor Coordinator {
     /// How long a request may wait for the phone before the terminal takes over.
-    /// Deliberately far below Claude Code's ten-minute hook timeout: an unanswered phone
-    /// should cost seconds, not a session you come back to find wedged.
+    ///
+    /// Deliberately far below Claude Code's ten-minute hook timeout: an unanswered phone should
+    /// cost seconds, not a session you come back from lunch to find wedged.
+    ///
+    /// The clock starts on arrival rather than at the head of the queue. Starting it at the head
+    /// would make total latency grow with queue depth and reintroduce exactly the indefinite
+    /// wait that failing open exists to prevent.
     static let window: TimeInterval = 45
 
-    private let link: BLELink
+    private struct Pending {
+        let id: String
+        let prompt: Prompt
+        let continuation: CheckedContinuation<Decision.Verdict?, Never>
+    }
+
+    private let link: any LinkSink
     private let log: Logger
 
-    private var pending: (id: String, continuation: CheckedContinuation<Decision.Verdict?, Never>)?
-    private var current: Prompt?
+    private var queue: [Pending] = []
     private var entries: [String] = []
     private var sessions = Set<String>()
 
-    init(link: BLELink, log: Logger) {
+    init(link: any LinkSink, log: Logger) {
         self.link = link
         self.log = log
     }
 
-    func sessionStarted(_ id: String) { sessions.insert(id); pushSnapshot() }
-    func sessionEnded(_ id: String) { sessions.remove(id); pushSnapshot() }
+    // MARK: - Session bookkeeping
+
+    func sessionStarted(_ id: String) {
+        sessions.insert(id)
+        pushSnapshot()
+    }
+
+    func sessionEnded(_ id: String) {
+        sessions.remove(id)
+        pushSnapshot()
+    }
 
     func recordToolUse(tool: String, hint: String) {
         entries.insert(entryLine(tool: tool, hint: hint), at: 0)
-        if entries.count > 12 { entries.removeLast(entries.count - 12) }
+        if entries.count > Self.entryLimit { entries.removeLast(entries.count - Self.entryLimit) }
         pushSnapshot()
     }
+
+    // MARK: - Approvals
 
     func decide(_ request: HookRequest) async -> HookResponse {
         guard link.isLinked else {
             log.decision("\(request.toolName): no phone linked, deferring to terminal")
             return .noDecision
         }
-        guard pending == nil else {
-            log.decision("\(request.toolName): phone busy with another request, deferring")
-            return .noDecision
-        }
 
-        let id = "req_" + UUID().uuidString.prefix(8).lowercased()
+        let id = Self.newRequestID()
         let deadline = Date().addingTimeInterval(Self.window)
-        current = Prompt.truncatingHint(
+        let prompt = Prompt.truncatingHint(
             id: id,
             tool: request.toolName,
             hint: request.hint,
             cwd: request.cwd,
             expires: Int(deadline.timeIntervalSince1970))
-        pushSnapshot()
+
         log.decision("\(id) \(request.toolName) asked — \(request.hint)")
 
         let verdict = await withCheckedContinuation { (continuation: CheckedContinuation<Decision.Verdict?, Never>) in
-            pending = (id, continuation)
+            queue.append(Pending(id: id, prompt: prompt, continuation: continuation))
+            pushSnapshot()
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(Self.window * 1_000_000_000))
                 await self?.expire(id)
             }
         }
-
-        current = nil
-        pushSnapshot()
 
         switch verdict {
         case .once:
@@ -78,37 +102,71 @@ actor Coordinator {
         }
     }
 
+    /// Accepts an answer for anything still queued, not only the head.
+    ///
+    /// The head is what the phone shows, but a decision can arrive for a request that has just
+    /// been overtaken — that is a race, not an error.
     func resolve(_ decision: Decision) {
-        // A decision that lost the race with the timeout, or answers a prompt we already
-        // dropped, is not an error — it is just late.
-        guard let pending, pending.id == decision.id else { return }
-        self.pending = nil
+        guard let index = queue.firstIndex(where: { $0.id == decision.id }) else { return }
+        let pending = queue.remove(at: index)
         pending.continuation.resume(returning: decision.decision)
+        pushSnapshot()
     }
 
     func linkChanged(_ up: Bool) {
         log.info(up ? "phone linked" : "phone unlinked")
-        if up { pushSnapshot() }
+        if up {
+            pushSnapshot()
+            return
+        }
+        // With the link gone nobody is going to answer. Releasing the whole queue at once
+        // beats leaving several terminals blocked for the rest of their windows.
+        let stranded = queue
+        queue.removeAll()
+        for pending in stranded {
+            log.decision("\(pending.id) released, phone went away")
+            pending.continuation.resume(returning: nil)
+        }
     }
 
-    func keepalive() { if link.isLinked { pushSnapshot() } }
+    func keepalive() {
+        if link.isLinked { pushSnapshot() }
+    }
+
+    // MARK: - Internals
 
     private func expire(_ id: String) {
-        guard let pending, pending.id == id else { return }
-        self.pending = nil
+        guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
+        let pending = queue.remove(at: index)
         pending.continuation.resume(returning: nil)
+        pushSnapshot()
     }
 
     private func pushSnapshot() {
         guard link.isLinked else { return }
+        let head = queue.first
         let snapshot = Snapshot(
             total: sessions.count,
             running: sessions.count,
-            waiting: current == nil ? 0 : 1,
-            msg: current.map { "approve: \($0.tool)" } ?? "idle",
+            waiting: queue.count,
+            msg: head.map { "approve: \($0.prompt.tool)" } ?? "idle",
             entries: entries,
-            prompt: current)
+            prompt: head?.prompt)
         guard let data = try? LineCodec.encode(snapshot) else { return }
         link.send(data)
     }
+
+    private static func newRequestID() -> String {
+        "req_" + UUID().uuidString.prefix(8).lowercased()
+    }
+
+    private static let entryLimit = 12
+
+    // MARK: - Test seams
+
+    /// Queue depth, for tests. The same number the phone sees as `waiting`.
+    var queueDepth: Int { queue.count }
+
+    /// Identifier of the request currently on screen, for tests.
+    var headID: String? { queue.first?.id }
 }

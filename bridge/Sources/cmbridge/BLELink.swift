@@ -6,7 +6,9 @@ import CoreBluetooth
 ///
 /// All CoreBluetooth work happens on a private serial queue. Callers touch only `isLinked`
 /// and `send(_:)`, which are safe from anywhere.
-final class BLELink: NSObject {
+/// `@unchecked Sendable`: every mutable field is touched only on `queue`, and `isLinked` is
+/// guarded by `lock`. The compiler cannot see either invariant.
+final class BLELink: NSObject, LinkSink, @unchecked Sendable {
     private let queue = DispatchQueue(label: "cmbridge.ble")
     private let log: Logger
 
