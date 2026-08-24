@@ -1,0 +1,110 @@
+package dev.heywood8.claudebuddy
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.util.UUID
+
+/** Nordic UART Service, as specified in docs/PROTOCOL.md. */
+object Nus {
+    val SERVICE: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
+
+    /** The bridge writes here. */
+    val RX: UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
+
+    /** We notify here. */
+    val TX: UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
+
+    /** Client Characteristic Configuration, the standard subscribe switch. */
+    val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+}
+
+@Serializable
+data class Prompt(
+    val id: String,
+    val tool: String,
+    val hint: String,
+    val cwd: String = "",
+    /** Wall-clock second at which the bridge gives up, so we can show a countdown. */
+    val expires: Long = 0,
+)
+
+/** Complete state, not a delta. */
+@Serializable
+data class Snapshot(
+    val t: String = "snap",
+    val total: Int = 0,
+    val running: Int = 0,
+    val waiting: Int = 0,
+    val msg: String = "",
+    val entries: List<String> = emptyList(),
+    val prompt: Prompt? = null,
+)
+
+@Serializable
+enum class Verdict {
+    @SerialName("once")
+    ONCE,
+
+    @SerialName("deny")
+    DENY,
+}
+
+/** Field names follow Anthropic's maker specification. */
+@Serializable
+data class Decision(
+    val cmd: String = "permission",
+    val id: String,
+    val decision: Verdict,
+)
+
+object Wire {
+    const val MAX_LINE = 8 * 1024
+
+    val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
+    }
+
+    fun encode(decision: Decision): ByteArray =
+        (json.encodeToString(decision) + "\n").toByteArray(Charsets.UTF_8)
+
+    /**
+     * Returns null for anything we do not recognise. An unfamiliar line is not worth tearing
+     * the link down for — the bridge may simply be newer than we are.
+     */
+    fun decodeSnapshot(line: ByteArray): Snapshot? {
+        if (line.size > MAX_LINE) return null
+        return runCatching { json.decodeFromString<Snapshot>(String(line, Charsets.UTF_8)) }
+            .getOrNull()
+            ?.takeIf { it.t == "snap" }
+    }
+}
+
+/**
+ * Reassembles newline-delimited lines out of GATT writes, which arrive chopped at whatever
+ * the negotiated MTU allows.
+ */
+class LineAssembler {
+    private val buffer = StringBuilder()
+
+    fun feed(chunk: ByteArray): List<ByteArray> {
+        buffer.append(String(chunk, Charsets.UTF_8))
+        val lines = mutableListOf<ByteArray>()
+        while (true) {
+            val nl = buffer.indexOf("\n")
+            if (nl < 0) break
+            val line = buffer.substring(0, nl)
+            buffer.delete(0, nl + 1)
+            if (line.isNotEmpty()) lines += line.toByteArray(Charsets.UTF_8)
+        }
+        // A peer that never terminates a line must not be able to exhaust our memory.
+        if (buffer.length > MAX_LINE_CHARS) buffer.setLength(0)
+        return lines
+    }
+
+    private companion object {
+        const val MAX_LINE_CHARS = Wire.MAX_LINE
+    }
+}
