@@ -109,10 +109,14 @@ screen whose command is being approved.
 ### 3. Key derivation
 
 ```
-K_session = HKDF-SHA256(ikm = psk, salt = host_salt || phone_salt, info = "cmb/v1/session", L = 32)
-K_h2p     = HKDF-SHA256(ikm = K_session, salt = "",                info = "cmb/v1/h2p",     L = 32)
-K_p2h     = HKDF-SHA256(ikm = K_session, salt = "",                info = "cmb/v1/p2h",     L = 32)
+K_session = HKDF-SHA256(ikm = psk,       salt = host_salt || phone_salt, info = "cmb/v1/session", L = 32)
+K_h2p     = HKDF-SHA256(ikm = K_session, salt = "cmb/v1",                info = "h2p",            L = 32)
+K_p2h     = HKDF-SHA256(ikm = K_session, salt = "cmb/v1",                info = "p2h",            L = 32)
 ```
+
+Salts are non-empty throughout. RFC 5869 lets an absent salt stand for a string of HashLen
+zeros, and two implementations can quietly disagree about whether "empty" means "absent" — which
+would produce different keys and a link that connects and then says nothing.
 
 Session keys are derived per connection so that the AES-GCM counter can restart at zero without
 ever reusing a nonce under a long-lived key. Separate directional keys mean a frame cannot be

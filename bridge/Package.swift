@@ -21,5 +21,10 @@ let package = Package(
             // Migrating is tracked in backlog.md.
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "cmbridgeTests",
+            dependencies: ["cmbridge"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )
