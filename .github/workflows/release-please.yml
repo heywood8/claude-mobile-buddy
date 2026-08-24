@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      android_released: ${{ steps.release.outputs['android--release_created'] }}
+      android_tag: ${{ steps.release.outputs['android--tag_name'] }}
+    steps:
+      # Two packages in one repository, so tags carry their component: android-v0.2.0 and
+      # bridge-v0.2.0 move independently. A change to the protocol usually bumps both, which is
+      # exactly what you want to see in the tag history.
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  apk:
+    name: Attach APK to the Android release
+    needs: release-please
+    if: needs.release-please.outputs.android_released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Debug-signed for now. Release signing needs a keystore in secrets, which is a decision
+      # about where that keystore lives rather than a line of YAML.
+      - name: Assemble
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.android_tag }}
+        run: |
+          gh release upload "$TAG" \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            --clobber
+
+# The bridge is not attached to releases. A downloaded .app is quarantined by Gatekeeper unless
+# it is signed and notarised, which needs a paid Developer ID; built from source it is not.
+# See backlog.md.

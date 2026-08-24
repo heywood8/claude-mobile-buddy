@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    name: Bridge (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The manifest is pinned to tools 6.0 on purpose, so any Swift 6 toolchain a runner
+      # happens to ship will do. Printed here because a version mismatch is the first thing
+      # you want to see when a build fails for no visible reason.
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        working-directory: bridge
+        run: swift build
+
+      # Runs the protocol vectors in docs/protocol/fixtures. The Android job below reads the
+      # same file, which is the point: two implementations cannot drift without this failing.
+      - name: Test
+        working-directory: bridge
+        run: swift test
+
+  android:
+    name: App (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      # Android ships minor-versioned platforms now: `platforms;android-37` does not resolve,
+      # `platforms;android-37.1` does. Installed explicitly rather than left to Gradle so that
+      # a missing package fails here with a clear message.
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest
+
+      - name: Assemble
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-results
+          path: android/app/build/reports/tests/
+          if-no-files-found: ignore
+
+  # Nothing here exercises Bluetooth. GitHub runners have no radio and the Android emulator
+  # does not emulate the peripheral role, so advertising, MTU negotiation and chunking are
+  # verified by hand on a device. CI covers the codec, the queue and the fact that both halves
+  # still compile.
