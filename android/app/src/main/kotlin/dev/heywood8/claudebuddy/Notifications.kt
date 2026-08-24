@@ -69,6 +69,11 @@ object Notifications {
         verdict: Verdict,
         label: String,
     ): Notification.Action {
+        // Explicit by construction — Intent(Context, Class) sets the component — and the
+        // PendingIntent below is FLAG_IMMUTABLE, so the notification shade cannot fill
+        // anything in. CodeQL's java/android/implicit-pendingintents flags this anyway; it
+        // does not follow the component through Kotlin's apply block. Dismissed as a false
+        // positive rather than contorting the code to satisfy the query.
         val intent = Intent(context, DecisionReceiver::class.java).apply {
             action = DecisionReceiver.ACTION_DECIDE
             putExtra(DecisionReceiver.EXTRA_ID, id)
