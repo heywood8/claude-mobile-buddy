@@ -76,12 +76,22 @@ enum LineCodec {
     /// Decoded lines are capped; a longer one is a protocol violation, not something to buffer.
     static let maxLine = 8 * 1024
 
+    /// A complete wire line, newline included.
     static func encode<T: Encodable>(_ value: T) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        var data = try encoder.encode(value)
+        var data = try payload(value)
         data.append(0x0A)
         return data
+    }
+
+    /// The JSON on its own, with no trailing newline.
+    ///
+    /// This is what goes inside an encrypted frame: the newline is framing for the outer
+    /// stream, and the frame envelope is already a line of its own. Sealing it as well would
+    /// encrypt a byte that means nothing to the reader.
+    static func payload<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try encoder.encode(value)
     }
 
     static func decode(_ line: Data) throws -> Inbound {

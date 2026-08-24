@@ -130,6 +130,12 @@ Every line after the handshake is:
 {"n":<counter>,"c":"<base64 ciphertext||tag>"}
 ```
 
+The plaintext inside a frame is the JSON object alone, with **no trailing newline**. The newline
+is framing for the outer stream, and the envelope above is already a line of its own; sealing
+one as well would encrypt a byte that means nothing to the reader — and would put the two
+implementations one byte apart, which is exactly the kind of disagreement the shared vectors
+exist to catch.
+
 - `counter` — unsigned, starts at 0, increments by exactly 1 per frame, per direction.
 - Nonce — 12 bytes: eight zero bytes followed by `counter` big-endian.
 - AAD — the ASCII decimal representation of `counter`.

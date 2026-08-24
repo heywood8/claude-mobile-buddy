@@ -40,6 +40,18 @@
       "ciphertextBase64": "rIFrdUfdVTiCHqr0bvbMwzE7EaIJeNcJfpgwQJTrcXgIQxG7DtmYFvxRKpV2Q2Fx++CY76vPBMgPK+KaZl9MuhoYujoR"
     }
   ],
+  "handshake": {
+    "hostId": "0123456789abcdef0123456789abcdef",
+    "hostName": "Test Host",
+    "deviceName": "Pixel 7 Pro",
+    "hostSaltBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+    "phoneSaltBase64": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=",
+    "hello": "{\"host\":\"0123456789abcdef0123456789abcdef\",\"hs\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\",\"t\":\"hello\",\"v\":1}",
+    "challenge": "{\"ps\":\"QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=\",\"t\":\"challenge\",\"v\":1}",
+    "authCiphertextBase64": "kGYRFHOSB9tjEFIuo2WYLllcrqpUMxl/b8jsoUweg+B651gr9Trr4c1YmRDQwTf2OIBwLsnJRcrQ0fEH/XmPZoUpiXh6GPZCm0I=",
+    "readyCiphertextBase64": "w1faHJbzTpkEe70BcUnyt7klH97KgTUscN66tKtEwhnzqBIc5AsioQT+W0FKe2x7E3MFuyM0j430Zr80+II=",
+    "authTime": [1775731234, -25200]
+  },
   "pairing": {
     "valid": [
       {
