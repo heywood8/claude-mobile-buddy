@@ -19,6 +19,10 @@ class BuddyService : Service() {
     private var lastPromptId: String? = null
     private var lastSnapshot: Snapshot? = null
 
+    /** What is on screen now, so its disappearance can be recorded if nobody answered it. */
+    private var shownPrompt: Prompt? = null
+    private val answered = LinkedHashSet<String>()
+
     override fun onCreate() {
         super.onCreate()
         Notifications.ensureChannels(this)
@@ -46,7 +50,11 @@ class BuddyService : Service() {
             return START_NOT_STICKY
         }
         this.peripheral = peripheral
-        BuddyState.sink = peripheral::send
+        BuddyState.sink = { decision, source ->
+            peripheral.send(decision)
+            journal(decision.id, decision.decision.name.lowercase(), source)
+        }
+        Journal.prune(this)
         BuddyState.setRunning(true)
         return START_STICKY
     }
@@ -64,6 +72,16 @@ class BuddyService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun onSnapshot(snapshot: Snapshot) {
+        // A request that vanishes without an answer is worth a line of its own. Without it the
+        // journal would only show the decisions you made, never the ones that timed out or
+        // were withdrawn while you were elsewhere — which is exactly what you would go looking
+        // for afterwards.
+        val previous = shownPrompt
+        if (previous != null && previous.id != snapshot.prompt?.id && previous.id !in answered) {
+            journal(previous.id, outcome = "unanswered", source = "", prompt = previous)
+        }
+        shownPrompt = snapshot.prompt
+
         lastSnapshot = snapshot
         BuddyState.update(snapshot)
         renderApproval()
@@ -75,6 +93,11 @@ class BuddyService : Service() {
         val prompt = snapshot.prompt
         if (prompt == null) {
             lastPromptId = null
+            Notifications.clearApproval(this)
+            return
+        }
+        if (!Settings.notificationsEnabled(this)) {
+            // Approvals still queue and still wait; they simply stop buzzing.
             Notifications.clearApproval(this)
             return
         }
@@ -107,7 +130,34 @@ class BuddyService : Service() {
         }
     }
 
+    private fun journal(
+        id: String,
+        outcome: String,
+        source: String,
+        prompt: Prompt? = lastSnapshot?.prompt?.takeIf { it.id == id } ?: shownPrompt,
+    ) {
+        if (outcome != "unanswered") {
+            answered += id
+            // Bounded: this only exists to stop an answered request being logged twice.
+            while (answered.size > ANSWERED_MEMORY) answered.remove(answered.first())
+        }
+        Journal.record(
+            this,
+            Journal.Entry(
+                at = System.currentTimeMillis() / 1000,
+                id = id,
+                tool = prompt?.tool ?: "?",
+                hint = prompt?.hint ?: "",
+                cwd = prompt?.cwd ?: "",
+                host = peripheral?.host?.name ?: "",
+                outcome = outcome,
+                source = source,
+            ),
+        )
+    }
+
     private companion object {
         const val TAG = "BuddyService"
+        const val ANSWERED_MEMORY = 64
     }
 }

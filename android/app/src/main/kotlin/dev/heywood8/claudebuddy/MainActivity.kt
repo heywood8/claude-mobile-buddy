@@ -20,6 +20,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +41,19 @@ class MainActivity : ComponentActivity() {
         if (granted.values.all { it }) startService(Intent(this, BuddyService::class.java))
     }
 
+    // Export through the document picker rather than a FileProvider: the journal names
+    // commands and paths, so where a copy of it lands should be a decision, not a default.
+    private val exportJournal = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-ndjson")
+    ) { uri ->
+        uri ?: return@registerForActivityResult
+        runCatching {
+            contentResolver.openOutputStream(uri)?.use { stream ->
+                stream.write(Journal.exportText(this).toByteArray())
+            }
+        }
+    }
+
     private val cameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -51,25 +65,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                var pairing by remember { mutableStateOf(false) }
+                var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 Scaffold { padding ->
                     val modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .padding(16.dp)
 
-                    if (pairing) {
-                        PairingScreen(
+                    when (screen) {
+                        Screen.PAIRING -> PairingScreen(
                             modifier = modifier,
-                            onPaired = { pairing = false },
-                            onCancel = { pairing = false },
+                            onPaired = { screen = Screen.DASHBOARD },
+                            onCancel = { screen = Screen.DASHBOARD },
                         )
-                    } else {
-                        Dashboard(
+
+                        Screen.HISTORY -> HistoryScreen(
+                            modifier = modifier,
+                            onExport = { exportJournal.launch("claude-buddy-journal.jsonl") },
+                            onBack = { screen = Screen.DASHBOARD },
+                        )
+
+                        Screen.DASHBOARD -> Dashboard(
                             modifier = modifier,
                             onStart = ::requestAndStart,
                             onStop = { stopService(Intent(this, BuddyService::class.java)) },
-                            onPair = { withCamera { pairing = true } },
+                            onPair = { withCamera { screen = Screen.PAIRING } },
+                            onHistory = { screen = Screen.HISTORY },
                         )
                     }
                 }
@@ -111,12 +132,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class Screen { DASHBOARD, PAIRING, HISTORY }
+
 @Composable
 private fun Dashboard(
     modifier: Modifier = Modifier,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPair: () -> Unit,
+    onHistory: () -> Unit,
 ) {
     val context = LocalContext.current
     val snapshot = BuddyState.snapshot
@@ -151,6 +175,25 @@ private fun Dashboard(
             Button(onClick = onStart, enabled = paired.isNotEmpty()) { Text("Start") }
             OutlinedButton(onClick = onStop) { Text("Stop") }
             OutlinedButton(onClick = onPair) { Text("Pair") }
+            OutlinedButton(onClick = onHistory) { Text("History") }
+        }
+
+        var notify by remember { mutableStateOf(Settings.notificationsEnabled(context)) }
+        Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Switch(
+                checked = notify,
+                onCheckedChange = {
+                    notify = it
+                    Settings.setNotificationsEnabled(context, it)
+                },
+            )
+            Text(
+                if (notify) "Notify when a decision is waiting" else "Silent — check the app",
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
 
         val prompt = snapshot?.prompt
@@ -163,10 +206,10 @@ private fun Dashboard(
                         Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { BuddyState.answer(prompt.id, Verdict.ONCE) }) {
+                        Button(onClick = { BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP) }) {
                             Text("Allow")
                         }
-                        OutlinedButton(onClick = { BuddyState.answer(prompt.id, Verdict.DENY) }) {
+                        OutlinedButton(onClick = { BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP) }) {
                             Text("Deny")
                         }
                     }

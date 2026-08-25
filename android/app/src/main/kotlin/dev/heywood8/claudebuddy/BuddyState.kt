@@ -34,9 +34,9 @@ object BuddyState {
     @Volatile
     var onForegroundChange: (() -> Unit)? = null
 
-    /** Set by the service while it holds the link. */
+    /** Set by the service while it holds the link. Second argument is where the tap came from. */
     @Volatile
-    var sink: ((Decision) -> Unit)? = null
+    var sink: ((Decision, String) -> Unit)? = null
 
     fun update(value: Snapshot) = main.post { snapshot = value }
 
@@ -53,7 +53,12 @@ object BuddyState {
         onForegroundChange?.invoke()
     }
 
-    fun answer(id: String, verdict: Verdict) {
-        sink?.invoke(Decision(id = id, decision = verdict))
+    fun answer(id: String, verdict: Verdict, source: String) {
+        sink?.invoke(Decision(id = id, decision = verdict), source)
+    }
+
+    object Source {
+        const val NOTIFICATION = "notification"
+        const val APP = "app"
     }
 }

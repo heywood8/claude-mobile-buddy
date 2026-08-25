@@ -17,7 +17,7 @@ class DecisionReceiver : BroadcastReceiver() {
         // no way to tell a notification action that never fired from one whose decision was
         // dropped further down.
         Log.i(TAG, "notification action: $verdict for $id")
-        BuddyState.answer(id, verdict)
+        BuddyState.answer(id, verdict, BuddyState.Source.NOTIFICATION)
         Notifications.clearApproval(context)
     }
 
