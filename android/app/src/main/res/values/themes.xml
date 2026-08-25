@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+    <!--
+      DayNight, so the window background follows the system setting. With a hard-coded Light
+      parent the status bar icons stayed light against a white app background, which made the
+      clock and battery invisible — the bars are transparent under edge-to-edge, so what shows
+      through them is the app's own background.
+    -->
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,13 +19,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,9 +72,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Sets up the transparent system bars *and* the icon contrast that goes with them, so
+        // the clock stays legible whichever way the theme falls.
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            val dark = isSystemInDarkTheme()
+            MaterialTheme(colorScheme = colorScheme(dark)) {
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
+                var awake by remember { mutableStateOf(Settings.keepScreenOn(this)) }
+                // Applied to the window rather than held as a wake lock: this only keeps the
+                // display alive while our own window is in front, and releases it by itself
+                // the moment it is not.
+                LaunchedEffect(awake) {
+                    if (awake) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
                 Scaffold { padding ->
                     val modifier = Modifier
                         .fillMaxSize()
@@ -92,6 +115,11 @@ class MainActivity : ComponentActivity() {
                             onStop = { stopService(Intent(this, BuddyService::class.java)) },
                             onPair = { withCamera { screen = Screen.PAIRING } },
                             onHistory = { screen = Screen.HISTORY },
+                            awake = awake,
+                            onAwakeChange = {
+                                awake = it
+                                Settings.setKeepScreenOn(this, it)
+                            },
                         )
                     }
                 }
@@ -135,6 +163,22 @@ class MainActivity : ComponentActivity() {
 
 private enum class Screen { DASHBOARD, PAIRING, HISTORY }
 
+/**
+ * Wallpaper-derived colours where the platform offers them, plain Material otherwise.
+ *
+ * minSdk is 31, which is exactly where dynamic colour arrives, so the fallback is only ever
+ * reached on a device that has opted out of it.
+ */
+@Composable
+private fun colorScheme(dark: Boolean) = when {
+    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S -> {
+        val context = LocalContext.current
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    }
+    dark -> darkColorScheme()
+    else -> lightColorScheme()
+}
+
 @Composable
 private fun Dashboard(
     modifier: Modifier = Modifier,
@@ -142,6 +186,8 @@ private fun Dashboard(
     onStop: () -> Unit,
     onPair: () -> Unit,
     onHistory: () -> Unit,
+    awake: Boolean,
+    onAwakeChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val snapshot = BuddyState.snapshot
@@ -208,6 +254,23 @@ private fun Dashboard(
                 if (notify) "Notify when a decision is waiting" else "Silent — check the app",
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+
+        Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Switch(checked = awake, onCheckedChange = onAwakeChange)
+            Column {
+                Text("Keep the screen on", style = MaterialTheme.typography.bodyMedium)
+                if (awake) {
+                    // Worth saying out loud rather than leaving to be discovered.
+                    Text(
+                        "The phone will not lock either, and buttons here need no unlock.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
 
         val prompt = snapshot?.prompt

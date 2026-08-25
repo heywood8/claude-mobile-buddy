@@ -6,6 +6,7 @@ import android.content.Context
 object Settings {
     private const val PREFS = "settings"
     private const val NOTIFICATIONS = "notifications"
+    private const val KEEP_SCREEN_ON = "keepScreenOn"
 
     /**
      * Whether a pending approval raises a notification.
@@ -19,6 +20,22 @@ object Settings {
 
     fun setNotificationsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(NOTIFICATIONS, enabled).apply()
+    }
+
+    /**
+     * Whether the dashboard holds the display awake while it is open.
+     *
+     * Off by default, and the reason is not battery. Preventing the screen from timing out
+     * also prevents the device from locking, and the in-app buttons — unlike the notification
+     * actions — take no authentication. Left on, the phone sits unlocked on a desk with a
+     * one-tap approval for anything Claude Code asks. That is a fine trade when the desk is
+     * yours and a poor one otherwise, so it is a choice rather than a default.
+     */
+    fun keepScreenOn(context: Context): Boolean =
+        prefs(context).getBoolean(KEEP_SCREEN_ON, false)
+
+    fun setKeepScreenOn(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEEP_SCREEN_ON, enabled).apply()
     }
 
     private fun prefs(context: Context) =
