@@ -46,11 +46,42 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Debug-signed for now. Release signing needs a keystore in secrets, which is a decision
-      # about where that keystore lives rather than a line of YAML.
+      # The release must not be debuggable: the app holds a pre-shared key that authorises
+      # running commands on a workstation, and a debuggable build hands its own identity to
+      # anyone with adb access. Publishing a debug APK here would undo that on the one page
+      # people actually download from.
+      - name: Decode the keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not set; refusing to publish an unsigned build" >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
       - name: Assemble
         working-directory: android
-        run: ./gradlew assembleDebug
+        env:
+          CMB_STORE_FILE: ${{ runner.temp }}/release.jks
+          CMB_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CMB_KEY_ALIAS: claude-buddy
+          CMB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      # A build that quietly came out unsigned would be attached just as happily as a signed
+      # one, and nobody would notice until an install failed. Check before publishing.
+      - name: Verify it is signed and not debuggable
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK" | grep -q 'certificate DN' \
+            || { echo "APK is not signed" >&2; exit 1; }
+          if "$BT/aapt2" dump badging "$APK" | grep -q 'application-debuggable'; then
+            echo "APK is debuggable" >&2
+            exit 1
+          fi
+          "$BT/apksigner" verify --print-certs "$APK" | grep 'certificate DN'
 
       - name: Attach to release
         env:
@@ -58,7 +89,7 @@ jobs:
           TAG: ${{ needs.release-please.outputs.android_tag }}
         run: |
           gh release upload "$TAG" \
-            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/apk/release/app-release.apk \
             --clobber
 
 # The bridge is not attached to releases. A downloaded .app is quarantined by Gatekeeper unless

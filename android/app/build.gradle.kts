@@ -11,6 +11,12 @@ import java.util.Properties
 val signingConfigFile = File(System.getProperty("user.home"), ".config/claude-mobile-buddy/signing.properties")
 val signingProps = Properties().apply {
     if (signingConfigFile.isFile) signingConfigFile.inputStream().use(::load)
+    // CI has no home directory worth writing to and no business keeping one. Environment
+    // wins where it is set, so the same build works from a laptop and from a runner.
+    System.getenv("CMB_STORE_FILE")?.let { setProperty("storeFile", it) }
+    System.getenv("CMB_STORE_PASSWORD")?.let { setProperty("storePassword", it) }
+    System.getenv("CMB_KEY_ALIAS")?.let { setProperty("keyAlias", it) }
+    System.getenv("CMB_KEY_PASSWORD")?.let { setProperty("keyPassword", it) }
 }
 
 plugins {
