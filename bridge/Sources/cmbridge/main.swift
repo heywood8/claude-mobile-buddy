@@ -22,6 +22,7 @@ func takeValue(_ name: String) -> String? {
 let rotate = takeFlag("--rotate")
 let showURL = takeFlag("--url")
 let usePNG = takeFlag("--png")
+let settingsPath = takeValue("--settings").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
 let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
 
@@ -96,6 +97,36 @@ case "pair":
         print()
     } catch {
         log.error("could not write the identity: \(error)")
+        exit(1)
+    }
+
+case "install-hook":
+    do {
+        let plan = try HookInstaller.plan(
+            path: settingsPath ?? HookInstaller.defaultPath, port: port, window: window)
+        if plan.isNoop {
+            print("Already installed and up to date: \(plan.path.path)")
+            break
+        }
+        print("Changes to \(plan.path.path):")
+        print()
+        print(LineDiff.render(before: plan.before, after: plan.after))
+        print()
+        if plan.reformats {
+            print("Note: the file is also reindented, since it is rewritten from a parse.")
+            print("Key order is preserved; only whitespace moves.")
+        }
+        print("A copy of the current file is kept as settings.json.bak.")
+        print()
+        print("Apply? [y/N] ", terminator: "")
+        guard let answer = readLine()?.lowercased(), answer == "y" || answer == "yes" else {
+            print("Nothing written.")
+            break
+        }
+        try HookInstaller.apply(plan)
+        print("Written. Start a new claude session — the current one read its config at launch.")
+    } catch {
+        log.error("could not install the hooks: \(error)")
         exit(1)
     }
 
@@ -196,8 +227,11 @@ default:
                                        show the pairing code; --png opens an image
                                        instead of drawing it in the terminal
       cmbridge status [--port N]       show the identity and whether the bridge is up
+      cmbridge install-hook [--port N] [--window SECONDS] [--settings PATH]
+                                       merge the hooks into ~/.claude/settings.json,
+                                       showing the diff and asking first
       cmbridge print-hook [--port N] [--window SECONDS]
-                                       print the settings.json snippet to paste
+                                       print the snippet instead of merging it
       cmbridge print-agent [--port N] [--window SECONDS]
                                        print the LaunchAgent plist to install
 

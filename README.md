@@ -35,6 +35,21 @@ claude (CLI)  --HTTP-->  bridge.app (macOS)  --BLE/NUS-->  phone (Android)
 | `docs/protocol/fixtures/` | Golden vectors both implementations are tested against. |
 | `backlog.md` | Deferred work and the reasoning behind deferring it. |
 
+## Setting it up
+
+```
+cmbridge pair --png        # scan the code with the phone app
+cmbridge install-hook      # merge the hooks into ~/.claude/settings.json
+make app                   # build the bundle
+cmbridge print-agent       # the LaunchAgent that runs it at login
+```
+
+`install-hook` reads the settings file, works out the merge, shows you the diff and asks before
+writing anything, keeping the previous file as `settings.json.bak`. It appends to hook events
+you already use rather than replacing them, and re-running it updates its own entry instead of
+leaving a stale one behind. `print-hook` still prints the snippet if you would rather paste it
+yourself.
+
 ## Security
 
 The phone advertises itself into the air, and a GATT server that anyone in radio range can talk
