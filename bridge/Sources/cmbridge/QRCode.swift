@@ -1,5 +1,6 @@
 import Foundation
 import CoreImage
+import ImageIO
 
 /// Renders a QR code as text, so pairing needs no second screen and nothing typed.
 ///
@@ -79,6 +80,52 @@ enum QRCode {
             result = result.dropFirst().dropLast().map { Array($0.dropFirst().dropLast()) }
         }
         return result
+    }
+
+    /// The same code as a PNG, for terminals whose line height does not match their font.
+    ///
+    /// A terminal render is at the mercy of glyph metrics: a line height a few pixels taller
+    /// than the block glyph leaves a seam on every row, and a scanner looking for the
+    /// 1:1:3:1:1 run ratio inside a finder pattern never sees it. Measured on a real terminal:
+    /// 5px of seam against a 30px module, enough to make a structurally perfect code
+    /// undetectable. An image has no glyphs and no line height.
+    static func pngData(for text: String, scale: Int = 10) -> Data? {
+        guard let modules = matrix(for: text) else { return nil }
+        let side = (modules.count + quietZone * 2) * scale
+
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.linearGray),
+              let context = CGContext(
+                data: nil,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        else { return nil }
+
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        context.setFillColor(gray: 0, alpha: 1)
+        for (row, line) in modules.enumerated() {
+            for (column, isDark) in line.enumerated() where isDark {
+                context.fill(CGRect(
+                    x: (column + quietZone) * scale,
+                    // CoreGraphics counts up from the bottom; the matrix counts down from
+                    // the top.
+                    y: (modules.count - 1 - row + quietZone) * scale,
+                    width: scale,
+                    height: scale))
+            }
+        }
+
+        guard let image = context.makeImage(),
+              let data = CFDataCreateMutable(nil, 0),
+              let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
 
     /// Black on white regardless of the terminal's own colours. A QR rendered light-on-dark is

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import CoreImage
 @testable import cmbridge
 
 @Suite("QR rendering")
@@ -77,6 +78,28 @@ struct QRCodeTests {
         // cannot invert the code under a scanner that will not cope with that.
         #expect(rendered.contains("\u{1B}[30;47m"))
         #expect(rendered.hasSuffix("\u{1B}[0m"))
+    }
+
+    @Test("renders an image a decoder can actually read")
+    func pngRoundTrips() throws {
+        // Closes the loop the terminal render cannot: rendered here, read back by the system
+        // decoder. A pairing code that renders but does not scan is the failure this whole
+        // path exists to avoid, and it is invisible until someone points a camera at it.
+        let payload = PairingCode(
+            hostID: "0123456789abcdef0123456789abcdef",
+            key: Data(repeating: 0xAB, count: 32),
+            hostName: "Test Mac").url
+
+        let png = try #require(QRCode.pngData(for: payload))
+        let image = try #require(CIImage(data: png))
+        let detector = try #require(CIDetector(
+            ofType: CIDetectorTypeQRCode,
+            context: nil,
+            options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]))
+
+        let features = detector.features(in: image).compactMap { $0 as? CIQRCodeFeature }
+        #expect(features.count == 1)
+        #expect(features.first?.messageString == payload)
     }
 
     // MARK: - Helpers

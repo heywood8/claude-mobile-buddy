@@ -21,6 +21,7 @@ func takeValue(_ name: String) -> String? {
 
 let rotate = takeFlag("--rotate")
 let showURL = takeFlag("--url")
+let usePNG = takeFlag("--png")
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
 let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
 
@@ -62,6 +63,10 @@ case "pair":
         guard let code = identity.pairingCode else {
             log.error("stored identity is unreadable; run `cmbridge pair --rotate`")
             exit(1)
+        }
+        if usePNG {
+            showAsImage(code)
+            break
         }
         guard let rendered = QRCode.render(code.url) else {
             log.error("could not render the QR code")
@@ -153,7 +158,9 @@ default:
 
       cmbridge run [--port N] [--window SECONDS]
                                        run the bridge (port 8787, window 30 min)
-      cmbridge pair [--rotate] [--url] show the pairing QR code
+      cmbridge pair [--png] [--rotate] [--url]
+                                       show the pairing code; --png opens an image
+                                       instead of drawing it in the terminal
       cmbridge status [--port N]       show the identity and whether the bridge is up
       cmbridge print-hook [--port N] [--window SECONDS]
                                        print the settings.json snippet to paste
@@ -161,6 +168,40 @@ default:
     The bridge never edits ~/.claude/settings.json for you.
     """)
     exit(2)
+}
+
+/// Writes the pairing code to an image and opens it, then removes it.
+///
+/// The file carries the key, so it lands in a private temporary directory at 0600 and is
+/// deleted as soon as you say you are done. That is better hygiene than the terminal render
+/// it replaces: a QR in scrollback is the same secret, and scrollback outlives the moment.
+func showAsImage(_ code: PairingCode) {
+    guard let png = QRCode.pngData(for: code.url) else {
+        log.error("could not render the QR code")
+        exit(1)
+    }
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("cmb-pair-\(UUID().uuidString.prefix(8)).png")
+    guard FileManager.default.createFile(
+        atPath: url.path, contents: png, attributes: [.posixPermissions: 0o600])
+    else {
+        log.error("could not write \(url.path)")
+        exit(1)
+    }
+
+    let open = Process()
+    open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    open.arguments = [url.path]
+    try? open.run()
+
+    print()
+    print("Opened the pairing code as an image. Scan it in Claude Buddy on your phone.")
+    print("Host: \(code.hostName)  ·  id \(code.hostID.prefix(8))…")
+    print()
+    print("Press Enter once it has been scanned — the file is deleted then.")
+    _ = readLine()
+    try? FileManager.default.removeItem(at: url)
+    print("Deleted \(url.lastPathComponent).")
 }
 
 /// How wide the terminal is, or nil when stdout is not one.
