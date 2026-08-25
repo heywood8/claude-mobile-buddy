@@ -31,6 +31,22 @@ struct Prompt: Codable, Equatable {
     }
 }
 
+/// One live Claude Code session.
+///
+/// Times are absolute seconds in the host's clock, and the snapshot carries the host's `now`
+/// alongside them. The phone subtracts one from the other rather than comparing against its
+/// own clock, which is off by a second or two and would quietly misreport every duration.
+struct SessionSummary: Codable, Equatable {
+    let id: String
+    /// Where it is working, which is what tells two sessions apart at a glance.
+    let cwd: String
+    let started: Int
+    /// Last tool call seen from it.
+    let active: Int
+    /// Last time you decided something for it. Zero if you never have.
+    let decided: Int
+}
+
 /// Complete state, not a delta. Sent on change and as a keepalive.
 struct Snapshot: Codable, Equatable {
     var t: String = "snap"
@@ -40,6 +56,10 @@ struct Snapshot: Codable, Equatable {
     var msg: String
     var entries: [String]
     var prompt: Prompt?
+    /// The host's clock at the moment this was built.
+    var now: Int = 0
+    /// Defaulted so a snapshot written before this field existed still decodes.
+    var sessions: [SessionSummary] = []
 
     static let keepalive: TimeInterval = 10
 }

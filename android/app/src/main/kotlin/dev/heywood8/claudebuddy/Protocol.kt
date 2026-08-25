@@ -29,6 +29,25 @@ data class Prompt(
     val expires: Long = 0,
 )
 
+/**
+ * One live Claude Code session.
+ *
+ * Times are absolute seconds in the host's clock, and [Snapshot.now] carries the host's own
+ * clock alongside them — so durations are worked out entirely in the host's frame rather than
+ * against this phone's, which is off by a second or two.
+ */
+@Serializable
+data class SessionSummary(
+    val id: String = "",
+    /** Where it is working, which is what tells two sessions apart at a glance. */
+    val cwd: String = "",
+    val started: Long = 0,
+    /** Last tool call seen from it. */
+    val active: Long = 0,
+    /** Last time you decided something for it. Zero if you never have. */
+    val decided: Long = 0,
+)
+
 /** Complete state, not a delta. */
 @Serializable
 data class Snapshot(
@@ -39,6 +58,10 @@ data class Snapshot(
     val msg: String = "",
     val entries: List<String> = emptyList(),
     val prompt: Prompt? = null,
+    /** The host's clock when this was built. */
+    val now: Long = 0,
+    /** Defaulted, so a snapshot from a bridge without this field still decodes. */
+    val sessions: List<SessionSummary> = emptyList(),
 )
 
 @Serializable

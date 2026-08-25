@@ -57,6 +57,7 @@ fun DashboardScreen(
                 ) {
                     PendingDecision()
                     Status()
+                    Sessions()
                     RecentCalls()
                 }
                 Column(
@@ -73,6 +74,7 @@ fun DashboardScreen(
             ) {
                 PendingDecision()
                 Status()
+                Sessions()
                 Controls(onStart, onStop, onPair, onHistory, awake, onAwakeChange)
                 RecentCalls()
             }
@@ -123,6 +125,46 @@ private fun Status() {
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+@Composable
+private fun Sessions() {
+    val snapshot = BuddyState.snapshot ?: return
+    if (snapshot.sessions.isEmpty()) return
+
+    Text("Sessions", style = MaterialTheme.typography.titleSmall)
+    for (session in snapshot.sessions) {
+        Column(Modifier.padding(bottom = 6.dp)) {
+            Text(
+                session.cwd.ifEmpty { session.id.take(8) },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(describe(session, snapshot.now), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * How long it has been running, when it last did anything, and how long since you last had a
+ * say. The last of those is the one worth reading: a session that has been going for an hour
+ * without needing you is fine, and one that has not asked in an hour because it is stuck on
+ * something is not, and only the numbers next to each other tell them apart.
+ */
+private fun describe(session: SessionSummary, now: Long): String {
+    val parts = mutableListOf("running ${elapsed(now - session.started)}")
+    if (session.active > 0) parts += "last call ${elapsed(now - session.active)} ago"
+    parts += if (session.decided > 0) {
+        "you decided ${elapsed(now - session.decided)} ago"
+    } else {
+        "you have not stepped in"
+    }
+    return parts.joinToString(" · ")
+}
+
+private fun elapsed(seconds: Long): String = when {
+    seconds < 60 -> "just now"
+    seconds < 3600 -> "${seconds / 60}m"
+    else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
 }
 
 @Composable

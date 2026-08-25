@@ -40,6 +40,7 @@ actor Coordinator {
 
     private struct Pending {
         let id: String
+        let sessionID: String
         let prompt: Prompt
         let continuation: CheckedContinuation<Decision.Verdict?, Never>
     }
@@ -47,9 +48,16 @@ actor Coordinator {
     private let link: any LinkSink
     private let log: Logger
 
+    private struct Session {
+        let cwd: String
+        let started: Int
+        var active: Int
+        var decided: Int
+    }
+
     private var queue: [Pending] = []
     private var entries: [String] = []
-    private var sessions = Set<String>()
+    private var sessions: [String: Session] = [:]
 
     init(
         link: any LinkSink,
@@ -65,21 +73,38 @@ actor Coordinator {
 
     // MARK: - Session bookkeeping
 
-    func sessionStarted(_ id: String) {
-        sessions.insert(id)
+    func sessionStarted(_ id: String, cwd: String) {
+        let now = Self.now()
+        sessions[id] = Session(cwd: cwd, started: now, active: now, decided: 0)
         pushSnapshot()
     }
 
     func sessionEnded(_ id: String) {
-        sessions.remove(id)
+        sessions[id] = nil
         pushSnapshot()
     }
 
-    func recordToolUse(tool: String, hint: String) {
+    func recordToolUse(sessionID: String, cwd: String, tool: String, hint: String) {
         entries.insert(entryLine(tool: tool, hint: hint), at: 0)
         if entries.count > Self.entryLimit { entries.removeLast(entries.count - Self.entryLimit) }
+        touch(sessionID, cwd: cwd)
         pushSnapshot()
     }
+
+    /// Sessions are also learned from any hook that mentions one. SessionStart does not always
+    /// arrive first — a bridge restarted mid-session would otherwise never hear about the
+    /// sessions already running.
+    private func touch(_ id: String, cwd: String) {
+        let now = Self.now()
+        if var session = sessions[id] {
+            session.active = now
+            sessions[id] = session
+        } else {
+            sessions[id] = Session(cwd: cwd, started: now, active: now, decided: 0)
+        }
+    }
+
+    private static func now() -> Int { Int(Date().timeIntervalSince1970) }
 
     // MARK: - Approvals
 
@@ -102,6 +127,7 @@ actor Coordinator {
             cwd: request.cwd,
             expires: Int(deadline.timeIntervalSince1970))
 
+        touch(request.sessionID, cwd: request.cwd)
         log.decision("\(id) \(request.toolName) asked — \(request.hint)")
 
         // Cancellation matters as much as the answer: when Claude Code abandons the request —
@@ -110,7 +136,11 @@ actor Coordinator {
         // card, because tapping it looks like it did something.
         let verdict = await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Decision.Verdict?, Never>) in
-                queue.append(Pending(id: id, prompt: prompt, continuation: continuation))
+                queue.append(Pending(
+                    id: id,
+                    sessionID: request.sessionID,
+                    prompt: prompt,
+                    continuation: continuation))
                 pushSnapshot()
                 Task { [weak self] in
                     try? await Task.sleep(nanoseconds: UInt64(self?.window ?? Coordinator.defaultWindow) * 1_000_000_000)
@@ -144,6 +174,10 @@ actor Coordinator {
     func resolve(_ decision: Decision) {
         guard let index = queue.firstIndex(where: { $0.id == decision.id }) else { return }
         let pending = queue.remove(at: index)
+        if var session = sessions[pending.sessionID] {
+            session.decided = Self.now()
+            sessions[pending.sessionID] = session
+        }
         pending.continuation.resume(returning: decision.decision)
         pushSnapshot()
     }
@@ -198,7 +232,19 @@ actor Coordinator {
             waiting: queue.count,
             msg: head.map { "approve: \($0.prompt.tool)" } ?? "idle",
             entries: entries,
-            prompt: head?.prompt)
+            prompt: head?.prompt,
+            now: Self.now(),
+            sessions: sessions
+                .map { id, session in
+                    SessionSummary(
+                        id: id,
+                        cwd: session.cwd,
+                        started: session.started,
+                        active: session.active,
+                        decided: session.decided)
+                }
+                // Stable order, so the list on the phone does not reshuffle every keepalive.
+                .sorted { $0.started < $1.started })
         guard let data = try? LineCodec.encode(snapshot) else { return }
         link.send(data)
     }

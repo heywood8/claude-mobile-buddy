@@ -133,7 +133,7 @@ private final class HookHandler: ChannelInboundHandler {
 
         case "/session-start":
             if let request = HookRequest(body: payload) {
-                await coordinator.sessionStarted(request.sessionID)
+                await coordinator.sessionStarted(request.sessionID, cwd: request.cwd)
             }
             return Data("{}".utf8)
 
@@ -145,7 +145,11 @@ private final class HookHandler: ChannelInboundHandler {
 
         case "/tool-use":
             if let request = HookRequest(body: payload) {
-                await coordinator.recordToolUse(tool: request.toolName, hint: request.hint)
+                await coordinator.recordToolUse(
+                    sessionID: request.sessionID,
+                    cwd: request.cwd,
+                    tool: request.toolName,
+                    hint: request.hint)
             }
             return Data("{}".utf8)
 

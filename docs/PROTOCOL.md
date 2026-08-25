@@ -190,6 +190,32 @@ treats the link as dead after 30 seconds of silence.
 }
 ```
 
+`sessions` and `now` are extensions over the reference schema. A count answers "how many",
+which is rarely the question; what you want to know is which project is asking and how long it
+has been since you last had a say in it.
+
+```json
+"now": 1775731300,
+"sessions": [
+  {
+    "id": "abc123",
+    "cwd": "~/git/github/claude-mobile-buddy",
+    "started": 1775729000,
+    "active": 1775731280,
+    "decided": 1775731100
+  }
+]
+```
+
+All three stamps are absolute seconds in the **host's** clock, and `now` is the host's clock at
+the moment the snapshot was built. The phone works out durations by subtracting one from the
+other rather than from its own clock — measured skew between the two is a second or two, which
+would be invisible in the code and wrong in the display.
+
+`decided` is zero when you have never answered anything for that session. Sessions are learned
+from any hook that names one, not only `SessionStart`: a bridge restarted mid-session would
+otherwise never hear about the sessions already running.
+
 | Field | Source |
 |---|---|
 | `total`, `running` | `SessionStart` / `SessionEnd` hooks |
