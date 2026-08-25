@@ -83,13 +83,18 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 ## Bridge packaging
 
-The bridge is currently a plain executable produced by `swift build`. A command-line binary has
-no TCC identity of its own — it inherits Bluetooth permission from whatever launched it — so it
-works when started from a terminal that has been granted Bluetooth, and not otherwise.
+`make app` now produces the `.app` bundle, and `cmbridge print-agent` prints the LaunchAgent
+that runs it at login. What remains is the signature.
 
-Making it survive a reboot means an `.app` bundle carrying `NSBluetoothAlwaysUsageDescription`,
-marked `LSUIElement` so it stays out of the Dock, started by a LaunchAgent. Until that exists,
-run it from a terminal.
+The bundle is signed ad-hoc, because a TCC grant has to attach to *some* signature. An ad-hoc
+identity is the code hash, so every rebuild invalidates the Bluetooth permission and macOS asks
+again. Irrelevant once installed, tiresome while iterating. A Developer ID would make the
+identity stable across rebuilds — the same membership the notarisation entry below wants, so
+the two are one decision rather than two.
+
+The bundle also lives wherever it was built. The LaunchAgent hard-codes that path, so moving
+the checkout breaks it silently. Installing to `~/Applications` would fix that; it has not been
+done because it is one more thing that writes outside the repository.
 
 ## Swift 6 language mode
 

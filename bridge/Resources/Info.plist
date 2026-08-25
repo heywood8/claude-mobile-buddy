@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>cmbridge</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.heywood8.cmbridge</string>
+	<key>CFBundleName</key>
+	<string>cmbridge</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.2.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+
+	<!-- No Dock icon, no menu bar. This is a background agent, not an app you switch to. -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- The whole reason the bundle exists. A bare command-line binary has no TCC identity of
+	     its own and inherits Bluetooth permission from whatever launched it; under launchd
+	     there is nothing to inherit from, so the radio silently never appears. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>cmbridge talks to your phone over Bluetooth so you can approve Claude Code permission requests from it.</string>
+</dict>
+</plist>

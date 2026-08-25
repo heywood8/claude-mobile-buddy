@@ -99,6 +99,40 @@ case "pair":
         exit(1)
     }
 
+case "print-agent":
+    // Printed, not installed: loading an agent writes into ~/Library/LaunchAgents and
+    // arranges for something to run at every login. That is the user's call, the same way
+    // the hook block is.
+    let executable = Bundle.main.executableURL?.path
+        ?? CommandLine.arguments[0]
+    print("""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+    \t<key>Label</key>
+    \t<string>dev.heywood8.cmbridge</string>
+    \t<key>ProgramArguments</key>
+    \t<array>
+    \t\t<string>\(executable)</string>
+    \t\t<string>run</string>
+    \t\t<string>--port</string>
+    \t\t<string>\(port)</string>
+    \t\t<string>--window</string>
+    \t\t<string>\(Int(window))</string>
+    \t</array>
+    \t<key>RunAtLoad</key>
+    \t<true/>
+    \t<key>KeepAlive</key>
+    \t<true/>
+    \t<key>StandardErrorPath</key>
+    \t<string>\(NSHomeDirectory())/Library/Logs/cmbridge.log</string>
+    \t<key>StandardOutPath</key>
+    \t<string>\(NSHomeDirectory())/Library/Logs/cmbridge.log</string>
+    </dict>
+    </plist>
+    """)
+
 case "status":
     guard let identity = IdentityStore.load() else {
         print("Not paired yet. Run `cmbridge pair`.")
@@ -164,8 +198,10 @@ default:
       cmbridge status [--port N]       show the identity and whether the bridge is up
       cmbridge print-hook [--port N] [--window SECONDS]
                                        print the settings.json snippet to paste
+      cmbridge print-agent [--port N] [--window SECONDS]
+                                       print the LaunchAgent plist to install
 
-    The bridge never edits ~/.claude/settings.json for you.
+    The bridge edits neither ~/.claude/settings.json nor ~/Library/LaunchAgents.
     """)
     exit(2)
 }
