@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -109,7 +111,7 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DASHBOARD },
                         )
 
-                        Screen.DASHBOARD -> Dashboard(
+                        Screen.DASHBOARD -> DashboardScreen(
                             modifier = modifier,
                             onStart = ::requestAndStart,
                             onStop = { stopService(Intent(this, BuddyService::class.java)) },
@@ -177,132 +179,4 @@ private fun colorScheme(dark: Boolean) = when {
     }
     dark -> darkColorScheme()
     else -> lightColorScheme()
-}
-
-@Composable
-private fun Dashboard(
-    modifier: Modifier = Modifier,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onPair: () -> Unit,
-    onHistory: () -> Unit,
-    awake: Boolean,
-    onAwakeChange: (Boolean) -> Unit,
-) {
-    val context = LocalContext.current
-    val snapshot = BuddyState.snapshot
-    val paired = remember(BuddyState.running, BuddyState.linked) { Keyring.hosts(context) }
-
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = when {
-                paired.isEmpty() -> "Not paired with any bridge"
-                !BuddyState.running -> "Stopped"
-                BuddyState.linked -> "Bridge connected"
-                else -> "Advertising, waiting for the bridge"
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        if (paired.isEmpty()) {
-            // Advertising with an empty keyring can only ever end in unknown_host, so the
-            // dashboard leads with the one thing that has to happen first.
-            Text(
-                "Run cmbridge pair on your Mac and scan the code it prints.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        } else {
-            Row(
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    "Paired: " + paired.joinToString { it.name.ifEmpty { it.hostId.take(8) } },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                // Still reachable — re-pairing after a rotated key, or adding a second Mac —
-                // but out of the way of the buttons you actually press.
-                TextButton(onClick = onPair) { Text("Re-pair") }
-            }
-        }
-
-        // Only what does something right now. A Start button next to a live connection is a
-        // control that cannot be pressed meaningfully, and one of those teaches you to stop
-        // reading the row.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            when {
-                paired.isEmpty() -> Button(onClick = onPair) { Text("Pair") }
-                BuddyState.running -> OutlinedButton(onClick = onStop) { Text("Stop") }
-                else -> Button(onClick = onStart) { Text("Start") }
-            }
-            OutlinedButton(onClick = onHistory) { Text("History") }
-        }
-
-        var notify by remember { mutableStateOf(Settings.notificationsEnabled(context)) }
-        Row(
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Switch(
-                checked = notify,
-                onCheckedChange = {
-                    notify = it
-                    Settings.setNotificationsEnabled(context, it)
-                },
-            )
-            Text(
-                if (notify) "Notify when a decision is waiting" else "Silent — check the app",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        Row(
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Switch(checked = awake, onCheckedChange = onAwakeChange)
-            Column {
-                Text("Keep the screen on", style = MaterialTheme.typography.bodyMedium)
-                if (awake) {
-                    // Worth saying out loud rather than leaving to be discovered.
-                    Text(
-                        "The phone will not lock either, and buttons here need no unlock.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-
-        val prompt = snapshot?.prompt
-        if (prompt != null) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Approve ${prompt.tool}?", style = MaterialTheme.typography.titleLarge)
-                    Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
-                    if (prompt.cwd.isNotEmpty()) {
-                        Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP) }) {
-                            Text("Allow")
-                        }
-                        OutlinedButton(onClick = { BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP) }) {
-                            Text("Deny")
-                        }
-                    }
-                }
-            }
-        }
-
-        if (snapshot != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${snapshot.running} running · ${snapshot.waiting} waiting",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            for (entry in snapshot.entries) {
-                Text(entry, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
 }
