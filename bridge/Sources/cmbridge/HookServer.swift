@@ -22,8 +22,17 @@ final class HookServer {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 16)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            // Without this a peer's FIN just closes the channel, and while a response is
+            // outstanding NIO is not reading anyway, so it never arrives. Allowing half
+            // closure turns it into an inboundClosed event we can act on.
+            .childChannelOption(ChannelOptions.allowRemoteHalfClosure, value: true)
             .childChannelInitializer { [coordinator, log] channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMap {
+                // withPipeliningAssistance: false drops HTTPServerPipelineHandler, which
+                // suspends reads while a response is outstanding. That is the exact window in
+                // which a caller gives up, so with it in place the hang-up is never read and
+                // the phone keeps showing a prompt nobody is waiting for. We answer one
+                // request per connection and close, so pipelining assistance buys nothing.
+                channel.pipeline.configureHTTPServerPipeline(withPipeliningAssistance: false).flatMap {
                     channel.pipeline.addHandler(HookHandler(coordinator: coordinator, log: log))
                 }
             }
@@ -43,6 +52,11 @@ private final class HookHandler: ChannelInboundHandler {
     private let log: Logger
     private var head: HTTPRequestHead?
     private var body: ByteBuffer?
+
+    /// The decision currently being awaited on this connection, so it can be abandoned if the
+    /// connection is. Claude Code closes the socket when a tool call is interrupted, and that
+    /// is the only signal the bridge gets that nobody wants the answer any more.
+    private var inFlight: Task<Void, Never>?
 
     init(coordinator: Coordinator, log: Logger) {
         self.coordinator = coordinator
@@ -65,12 +79,46 @@ private final class HookHandler: ChannelInboundHandler {
             let channel = context.channel
             let coordinator = self.coordinator
             let log = self.log
-            Task {
+            inFlight = Task {
                 let response = await Self.route(path: path, payload: payload,
                                                 coordinator: coordinator, log: log)
+                guard !Task.isCancelled else { return }
+                // Cleared on the event loop so it is ordered against channelInactive: without
+                // this, closing the connection ourselves after replying looks exactly like the
+                // client hanging up on us.
+                channel.eventLoop.execute { [weak self] in self?.inFlight = nil }
                 Self.reply(on: channel, body: response)
             }
+
+            // Keep reading while the answer is pending. The HTTP pipeline stops reading once
+            // a request is complete and a response is outstanding, which is exactly the window
+            // in which the caller might give up — so without asking for more, a hang-up
+            // arrives only after it no longer matters.
+            context.read()
         }
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        abandon(reason: "connection closed")
+        context.fireChannelInactive()
+    }
+
+    /// Half closure: the caller has stopped talking but the socket is not gone yet. This is
+    /// what an interrupted tool call looks like from here.
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if case ChannelEvent.inputClosed = event {
+            abandon(reason: "caller hung up")
+            context.close(promise: nil)
+            return
+        }
+        context.fireUserInboundEventTriggered(event)
+    }
+
+    private func abandon(reason: String) {
+        guard let task = inFlight else { return }
+        log.info("\(reason), abandoning its request")
+        task.cancel()
+        inFlight = nil
     }
 
     private static func route(path: String, payload: Data,

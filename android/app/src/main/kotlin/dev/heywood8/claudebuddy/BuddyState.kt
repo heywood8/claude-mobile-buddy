@@ -25,6 +25,15 @@ object BuddyState {
     var running by mutableStateOf(false)
         private set
 
+    /** True while our own window is on screen, so the notification can stay out of the way. */
+    var foreground by mutableStateOf(false)
+        private set
+
+    /** Set by the service, so backgrounding the app can raise the notification immediately
+     *  rather than waiting for the next keepalive. */
+    @Volatile
+    var onForegroundChange: (() -> Unit)? = null
+
     /** Set by the service while it holds the link. */
     @Volatile
     var sink: ((Decision) -> Unit)? = null
@@ -37,6 +46,12 @@ object BuddyState {
     }
 
     fun setRunning(value: Boolean) = main.post { running = value }
+
+    fun setForeground(value: Boolean) = main.post {
+        if (foreground == value) return@post
+        foreground = value
+        onForegroundChange?.invoke()
+    }
 
     fun answer(id: String, verdict: Verdict) {
         sink?.invoke(Decision(id = id, decision = verdict))

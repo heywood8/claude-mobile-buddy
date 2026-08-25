@@ -77,6 +77,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // The notification exists to reach you when you are looking elsewhere. While this window
+    // is on screen the card is already in front of you, and a buzz on top of it is noise.
+    override fun onStart() {
+        super.onStart()
+        BuddyState.setForeground(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        BuddyState.setForeground(false)
+    }
+
     private fun requestAndStart() {
         linkPermissions.launch(
             arrayOf(

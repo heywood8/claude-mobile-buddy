@@ -85,13 +85,21 @@ actor Coordinator {
 
         log.decision("\(id) \(request.toolName) asked — \(request.hint)")
 
-        let verdict = await withCheckedContinuation { (continuation: CheckedContinuation<Decision.Verdict?, Never>) in
-            queue.append(Pending(id: id, prompt: prompt, continuation: continuation))
-            pushSnapshot()
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(self?.window ?? Coordinator.defaultWindow) * 1_000_000_000)
-                await self?.expire(id)
+        // Cancellation matters as much as the answer: when Claude Code abandons the request —
+        // you pressed escape, or answered in the terminal after the bridge gave up — the phone
+        // must stop showing a decision nobody is waiting for. A stale card is worse than no
+        // card, because tapping it looks like it did something.
+        let verdict = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Decision.Verdict?, Never>) in
+                queue.append(Pending(id: id, prompt: prompt, continuation: continuation))
+                pushSnapshot()
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(self?.window ?? Coordinator.defaultWindow) * 1_000_000_000)
+                    await self?.expire(id)
+                }
             }
+        } onCancel: {
+            Task { [weak self] in await self?.withdraw(id, reason: "caller went away") }
         }
 
         switch verdict {
@@ -102,7 +110,10 @@ actor Coordinator {
             log.decision("\(id) denied from phone")
             return .deny("Denied from phone")
         case nil:
-            log.decision("\(id) expired unanswered, deferring to terminal")
+            // Withdrawal already said why, and there is nobody left to answer in any case.
+            if !Task.isCancelled {
+                log.decision("\(id) expired unanswered, deferring to terminal")
+            }
             return .noDecision
         }
     }
@@ -139,6 +150,18 @@ actor Coordinator {
     }
 
     // MARK: - Internals
+
+    /// Drops a request nobody is waiting for any more.
+    func withdraw(_ id: String, reason: String) {
+        guard let index = queue.firstIndex(where: { $0.id == id }) else {
+            log.info("withdraw \(id): not queued any more")
+            return
+        }
+        let pending = queue.remove(at: index)
+        log.decision("\(id) withdrawn — \(reason)")
+        pending.continuation.resume(returning: nil)
+        pushSnapshot()
+    }
 
     private func expire(_ id: String) {
         guard let index = queue.firstIndex(where: { $0.id == id }) else { return }

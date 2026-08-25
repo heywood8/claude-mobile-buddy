@@ -17,10 +17,14 @@ import android.util.Log
 class BuddyService : Service() {
     private var peripheral: SecurePeripheral? = null
     private var lastPromptId: String? = null
+    private var lastSnapshot: Snapshot? = null
 
     override fun onCreate() {
         super.onCreate()
         Notifications.ensureChannels(this)
+        // Leaving the app with a decision pending has to raise the notification straight away,
+        // not at whatever moment the next keepalive happens to land.
+        BuddyState.onForegroundChange = { renderApproval() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -48,6 +52,7 @@ class BuddyService : Service() {
     }
 
     override fun onDestroy() {
+        BuddyState.onForegroundChange = null
         BuddyState.sink = null
         BuddyState.setRunning(false)
         peripheral?.stop()
@@ -59,10 +64,23 @@ class BuddyService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun onSnapshot(snapshot: Snapshot) {
+        lastSnapshot = snapshot
         BuddyState.update(snapshot)
+        renderApproval()
+    }
+
+    private fun renderApproval() {
+        val snapshot = lastSnapshot ?: return
         val manager = getSystemService(NotificationManager::class.java)
         val prompt = snapshot.prompt
         if (prompt == null) {
+            lastPromptId = null
+            Notifications.clearApproval(this)
+            return
+        }
+        if (BuddyState.foreground) {
+            // Already on screen. Reset the id so leaving the app buzzes once, rather than
+            // treating the request as one you have already been told about.
             lastPromptId = null
             Notifications.clearApproval(this)
             return

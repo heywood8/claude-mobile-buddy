@@ -147,6 +147,44 @@ struct QueueTests {
         #expect(await coordinator.queueDepth == 0)
     }
 
+    @Test("withdraws a request whose caller has gone away")
+    func withdrawsOnCancel() async throws {
+        let link = FakeLink()
+        let coordinator = Coordinator(link: link, log: Logger())
+
+        let abandoned = Task { await coordinator.decide(request(tool: "Bash", hint: "one")) }
+        try await settle { await coordinator.queueDepth == 1 }
+        #expect(link.lastSnapshot?.prompt != nil)
+
+        // Claude Code closing the socket — an interrupted tool call — is the only signal the
+        // bridge gets that nobody wants the answer. Without acting on it the phone keeps
+        // showing a decision that can no longer do anything.
+        abandoned.cancel()
+
+        try await settle { await coordinator.queueDepth == 0 }
+        #expect(link.lastSnapshot?.prompt == nil)
+        #expect(link.lastSnapshot?.waiting == 0)
+    }
+
+    @Test("withdrawing one request promotes the next")
+    func withdrawPromotesTheNext() async throws {
+        let link = FakeLink()
+        let coordinator = Coordinator(link: link, log: Logger())
+
+        let abandoned = Task { await coordinator.decide(request(tool: "Bash", hint: "one")) }
+        try await settle { await coordinator.queueDepth == 1 }
+        let waiting = Task { await coordinator.decide(request(tool: "Write", hint: "two")) }
+        try await settle { await coordinator.queueDepth == 2 }
+
+        abandoned.cancel()
+        try await settle { await coordinator.queueDepth == 1 }
+        #expect(link.lastSnapshot?.prompt?.tool == "Write")
+
+        let id = try #require(await coordinator.headID)
+        await coordinator.resolve(Decision(id: id, decision: .once))
+        #expect(await waiting.value.isAllow)
+    }
+
     @Test("carries the deadline so the phone can count down")
     func carriesDeadline() async throws {
         let link = FakeLink()
