@@ -67,8 +67,18 @@ object Wire {
         explicitNulls = false
     }
 
+    /** A complete wire line, newline included. */
     fun encode(decision: Decision): ByteArray =
         (json.encodeToString(decision) + "\n").toByteArray(Charsets.UTF_8)
+
+    /**
+     * The JSON on its own, with no trailing newline.
+     *
+     * This is what goes inside an encrypted frame: the newline is framing for the outer
+     * stream, and the frame envelope is already a line of its own.
+     */
+    fun encodePayload(decision: Decision): ByteArray =
+        json.encodeToString(decision).toByteArray(Charsets.UTF_8)
 
     /**
      * Returns null for anything we do not recognise. An unfamiliar line is not worth tearing

@@ -234,8 +234,13 @@ Sent by either side before disconnecting. Reasons: `unknown_host`, `busy`, `vers
 ## Queue and timing
 
 - One approval is on screen at a time. Others queue behind it; `waiting` carries the depth.
-- Each request's 45-second window starts when the bridge receives it, not when it reaches the
-  head of the queue. Total latency is therefore bounded regardless of queue depth.
+- Each request's window starts when the bridge receives it, not when it reaches the head of the
+  queue. Total latency is therefore bounded regardless of queue depth. The window defaults to
+  half an hour — the approval is meant to survive you being in a meeting — and is set with
+  `cmbridge run --window SECONDS`.
+- The hook's own timeout must exceed the window, or the hook abandons the request while the
+  phone is still showing it. `cmbridge print-hook` derives it from the window in use, so the
+  two cannot drift apart by hand.
 - On expiry the bridge answers the hook with `{}` and drops the request from the queue. The
   phone learns this from the next snapshot.
 - With no phone connected the bridge answers `{}` immediately rather than waiting.

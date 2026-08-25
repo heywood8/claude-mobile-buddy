@@ -22,16 +22,19 @@ func takeValue(_ name: String) -> String? {
 let rotate = takeFlag("--rotate")
 let showURL = takeFlag("--url")
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
+let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
 
-func hookSnippet(port: Int) -> String {
+func hookSnippet(port: Int, window: TimeInterval) -> String {
     let base = "http://127.0.0.1:\(port)"
-    // The hook timeout sits just above the bridge's own window, so the bridge is always the
-    // one that decides to give up. Claude Code's default of ten minutes never comes into play.
+    // Derived from the bridge's own window and deliberately a minute longer, so the bridge is
+    // always the side that decides to give up. Set it lower than the window and the hook
+    // abandons the request while your phone is still showing it.
+    let permissionTimeout = Int(window) + 60
     return """
     {
       "hooks": {
         "PermissionRequest": [
-          { "hooks": [ { "type": "http", "url": "\(base)/permission-request", "timeout": 60 } ] }
+          { "hooks": [ { "type": "http", "url": "\(base)/permission-request", "timeout": \(permissionTimeout) } ] }
         ],
         "SessionStart": [
           { "hooks": [ { "type": "http", "url": "\(base)/session-start", "timeout": 5 } ] }
@@ -50,7 +53,7 @@ func hookSnippet(port: Int) -> String {
 
 switch arguments.first {
 case "print-hook":
-    print(hookSnippet(port: port))
+    print(hookSnippet(port: port, window: window))
 
 case "pair":
     do {
@@ -96,8 +99,16 @@ case "status":
     print("Listening : \(probe(port: port) ? "yes on \(port)" : "no")")
 
 case "run", nil:
-    let link = BLELink(log: log)
-    let coordinator = Coordinator(link: link, log: log)
+    // No pairing, no session, no plaintext fallback. Refusing to start beats starting and
+    // silently never being able to talk to anything.
+    guard let identity = IdentityStore.load()?.pairingCode else {
+        log.error("not paired yet — run `cmbridge pair` and scan the code on your phone")
+        exit(1)
+    }
+    let transport = BLELink(log: log)
+    let link = SecureLink(transport: transport, identity: identity, log: log)
+    log.info("approval window \(Int(window) / 60) min \(Int(window) % 60) s")
+    let coordinator = Coordinator(link: link, log: log, window: window)
 
     link.onLine = { line in
         do {
@@ -133,10 +144,12 @@ default:
     print("""
     cmbridge — Claude Code approvals on your phone
 
-      cmbridge run [--port N]          run the bridge (default port 8787)
+      cmbridge run [--port N] [--window SECONDS]
+                                       run the bridge (port 8787, window 30 min)
       cmbridge pair [--rotate] [--url] show the pairing QR code
       cmbridge status [--port N]       show the identity and whether the bridge is up
-      cmbridge print-hook [--port N]   print the settings.json snippet to paste
+      cmbridge print-hook [--port N] [--window SECONDS]
+                                       print the settings.json snippet to paste
 
     The bridge never edits ~/.claude/settings.json for you.
     """)

@@ -1,0 +1,102 @@
+package dev.heywood8.claudebuddy
+
+import android.content.Context
+import android.util.Log
+
+/**
+ * Puts [PhoneSession] between the service and the radio.
+ *
+ * [GattPeripheral] still moves bytes and knows nothing about the protocol; the service still
+ * receives snapshots and knows nothing about keys. This is the only place that holds both.
+ *
+ * [isReady] stays false until the handshake finishes, so a connected-but-unauthenticated peer
+ * gets nothing: no snapshot is rendered and no decision can be sent.
+ */
+class SecurePeripheral(
+    private val context: Context,
+    private val deviceName: String,
+    private val onSnapshot: (Snapshot) -> Unit,
+    private val onReadyChange: (Boolean) -> Unit,
+) {
+    private var session: PhoneSession? = null
+    private var transport: GattPeripheral? = null
+
+    @Volatile
+    var isReady: Boolean = false
+        private set
+
+    /** Which bridge is on the other end, once the handshake has said so. */
+    val host: PairedHost?
+        get() = session?.host
+
+    fun start(): Boolean {
+        if (Keyring.hosts(context).isEmpty()) {
+            // Advertising with an empty keyring can only ever end in unknown_host. Better to
+            // refuse and say why than to blink at the ceiling.
+            Log.w(TAG, "no paired bridges — scan a pairing code first")
+            return false
+        }
+        val transport = GattPeripheral(context, ::onLine, ::onTransportChange)
+        this.transport = transport
+        return transport.start()
+    }
+
+    fun stop() {
+        session = null
+        setReady(false)
+        transport?.stop()
+        transport = null
+    }
+
+    fun send(decision: Decision) {
+        val sealed = session?.seal(Wire.encodePayload(decision)) ?: return
+        transport?.send(sealed)
+    }
+
+    // MARK: - Session plumbing
+
+    private fun onTransportChange(connected: Boolean) {
+        if (connected) {
+            // A fresh session per connection: session keys are derived from salts exchanged
+            // in this handshake, so nothing survives a reconnect on purpose.
+            session = PhoneSession(
+                lookup = { hostId -> Keyring.lookup(context, hostId) },
+                deviceName = deviceName,
+                isBusy = { isReady },
+            )
+        } else {
+            session = null
+            setReady(false)
+        }
+    }
+
+    private fun onLine(line: ByteArray) {
+        val session = session ?: return
+        for (output in session.receive(line)) {
+            when (output) {
+                is SessionOutput.Send -> transport?.send(output.line)
+                is SessionOutput.Ready -> {
+                    Log.i(TAG, "session ready with ${session.host?.name}, channel encrypted")
+                    setReady(true)
+                }
+                is SessionOutput.Message ->
+                    Wire.decodeSnapshot(output.plaintext)?.let(onSnapshot)
+                is SessionOutput.Close -> {
+                    Log.i(TAG, "session over: ${output.reason}")
+                    setReady(false)
+                    transport?.disconnect()
+                }
+            }
+        }
+    }
+
+    private fun setReady(value: Boolean) {
+        if (isReady == value) return
+        isReady = value
+        onReadyChange(value)
+    }
+
+    private companion object {
+        const val TAG = "SecurePeripheral"
+    }
+}

@@ -55,6 +55,15 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
         }
     }
 
+    /// Drops the connection. A session that ended for a protocol reason will not recover by
+    /// staying connected; reconnecting restarts the handshake from scratch.
+    func disconnect() {
+        queue.async { [weak self] in
+            guard let self, let peripheral = self.peripheral else { return }
+            self.central.cancelPeripheralConnection(peripheral)
+        }
+    }
+
     private func pumpWrites() {
         guard !writeInFlight,
               let peripheral, let rx,

@@ -2,6 +2,7 @@ package dev.heywood8.claudebuddy
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,39 +22,80 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
-    private val permissions = registerForActivityResult(
+    private var onCameraGranted: (() -> Unit)? = null
+
+    private val linkPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
         if (granted.values.all { it }) startService(Intent(this, BuddyService::class.java))
+    }
+
+    private val cameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) onCameraGranted?.invoke()
+        onCameraGranted = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
+                var pairing by remember { mutableStateOf(false) }
                 Scaffold { padding ->
-                    Dashboard(
-                        modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-                        onStart = ::requestAndStart,
-                        onStop = { stopService(Intent(this, BuddyService::class.java)) },
-                    )
+                    val modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(16.dp)
+
+                    if (pairing) {
+                        PairingScreen(
+                            modifier = modifier,
+                            onPaired = { pairing = false },
+                            onCancel = { pairing = false },
+                        )
+                    } else {
+                        Dashboard(
+                            modifier = modifier,
+                            onStart = ::requestAndStart,
+                            onStop = { stopService(Intent(this, BuddyService::class.java)) },
+                            onPair = { withCamera { pairing = true } },
+                        )
+                    }
                 }
             }
         }
     }
 
     private fun requestAndStart() {
-        permissions.launch(
+        linkPermissions.launch(
             arrayOf(
                 Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.POST_NOTIFICATIONS,
             )
         )
+    }
+
+    private fun withCamera(block: () -> Unit) {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            block()
+        } else {
+            onCameraGranted = block
+            cameraPermission.launch(Manifest.permission.CAMERA)
+        }
     }
 }
 
@@ -62,11 +104,16 @@ private fun Dashboard(
     modifier: Modifier = Modifier,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onPair: () -> Unit,
 ) {
+    val context = LocalContext.current
     val snapshot = BuddyState.snapshot
+    val paired = remember(BuddyState.running, BuddyState.linked) { Keyring.hosts(context) }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = when {
+                paired.isEmpty() -> "Not paired with any bridge"
                 !BuddyState.running -> "Stopped"
                 BuddyState.linked -> "Bridge connected"
                 else -> "Advertising, waiting for the bridge"
@@ -74,9 +121,24 @@ private fun Dashboard(
             style = MaterialTheme.typography.titleMedium,
         )
 
+        if (paired.isEmpty()) {
+            // Advertising with an empty keyring can only ever end in unknown_host, so the
+            // dashboard leads with the one thing that has to happen first.
+            Text(
+                "Run cmbridge pair on your Mac and scan the code it prints.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            for (host in paired) {
+                Text("Paired: ${host.name.ifEmpty { host.hostId.take(8) }}",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onStart) { Text("Start") }
+            Button(onClick = onStart, enabled = paired.isNotEmpty()) { Text("Start") }
             OutlinedButton(onClick = onStop) { Text("Stop") }
+            OutlinedButton(onClick = onPair) { Text("Pair") }
         }
 
         val prompt = snapshot?.prompt

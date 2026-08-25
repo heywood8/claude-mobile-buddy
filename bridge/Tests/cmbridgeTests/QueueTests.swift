@@ -150,15 +150,16 @@ struct QueueTests {
     @Test("carries the deadline so the phone can count down")
     func carriesDeadline() async throws {
         let link = FakeLink()
-        let coordinator = Coordinator(link: link, log: Logger())
+        let window: TimeInterval = 90
+        let coordinator = Coordinator(link: link, log: Logger(), window: window)
 
         let before = Int(Date().timeIntervalSince1970)
         let pending = Task { await coordinator.decide(request(tool: "Bash", hint: "one")) }
         try await settle { await coordinator.queueDepth == 1 }
 
         let expires = try #require(link.lastSnapshot?.prompt?.expires)
-        #expect(expires >= before + Int(Coordinator.window) - 1)
-        #expect(expires <= before + Int(Coordinator.window) + 1)
+        #expect(expires >= before + Int(window) - 1)
+        #expect(expires <= before + Int(window) + 1)
 
         let id = try #require(await coordinator.headID)
         await coordinator.resolve(Decision(id: id, decision: .once))

@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 
@@ -14,7 +15,7 @@ import android.util.Log
  * foreground service — that is the whole reason it exists.
  */
 class BuddyService : Service() {
-    private var peripheral: GattPeripheral? = null
+    private var peripheral: SecurePeripheral? = null
     private var lastPromptId: String? = null
 
     override fun onCreate() {
@@ -29,7 +30,12 @@ class BuddyService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
 
-        val peripheral = GattPeripheral(this, ::onSnapshot, ::onLinkChange)
+        val peripheral = SecurePeripheral(
+            context = this,
+            deviceName = Build.MODEL,
+            onSnapshot = ::onSnapshot,
+            onReadyChange = ::onLinkChange,
+        )
         if (!peripheral.start()) {
             Log.e(TAG, "could not start advertising")
             stopSelf()

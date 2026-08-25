@@ -21,13 +21,16 @@ import android.util.Log
  * The peripheral half of the link: advertises the service, serves the GATT characteristics,
  * and moves newline-delimited lines in both directions.
  *
- * The walking skeleton speaks plaintext. The handshake, session keys and AES-GCM framing
- * described in docs/PROTOCOL.md land on top of this once the path is proven end to end.
+ * A transport and nothing more. It has never heard of the handshake, of keys, or of what a
+ * line means — [SecurePeripheral] owns all of that, which is what keeps the protocol testable
+ * without a radio.
  */
 @SuppressLint("MissingPermission")
 class GattPeripheral(
     private val context: Context,
-    private val onSnapshot: (Snapshot) -> Unit,
+    /** Called with each complete line received from the peer. */
+    private val onLine: (ByteArray) -> Unit,
+    /** Called when a peer connects or disconnects — the transport, not the session. */
     private val onLinkChange: (Boolean) -> Unit,
 ) {
     private val manager = context.getSystemService(BluetoothManager::class.java)
@@ -111,10 +114,10 @@ class GattPeripheral(
         onLinkChange(false)
     }
 
-    fun send(decision: Decision) {
+    fun send(line: ByteArray) {
         val peer = peer ?: return
         val tx = tx ?: return
-        val bytes = Wire.encode(decision)
+        val bytes = line
         val limit = (mtu - GATT_HEADER).coerceAtLeast(MIN_CHUNK)
         var offset = 0
         while (offset < bytes.size) {
@@ -138,6 +141,15 @@ class GattPeripheral(
             @Suppress("DEPRECATION")
             server.notifyCharacteristicChanged(device, characteristic, false)
         }
+    }
+
+    /**
+     * Drops the peer. A session that ended for a protocol reason will not recover by staying
+     * connected; reconnecting restarts the handshake from scratch.
+     */
+    fun disconnect() {
+        val peer = peer ?: return
+        server?.cancelConnection(peer)
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
@@ -186,7 +198,7 @@ class GattPeripheral(
         ) {
             if (characteristic.uuid == Nus.RX) {
                 for (line in assembler.feed(value)) {
-                    Wire.decodeSnapshot(line)?.let(onSnapshot)
+                    onLine(line)
                 }
             }
             if (responseNeeded) {

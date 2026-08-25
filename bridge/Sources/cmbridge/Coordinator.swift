@@ -15,15 +15,19 @@ protocol LinkSink: AnyObject, Sendable {
 /// Every request carries its own deadline measured from when it arrived, not from when it
 /// reached the front — see `window`.
 actor Coordinator {
-    /// How long a request may wait for the phone before the terminal takes over.
+    /// Default time a request may wait for the phone before the terminal takes over.
     ///
-    /// Deliberately far below Claude Code's ten-minute hook timeout: an unanswered phone should
-    /// cost seconds, not a session you come back from lunch to find wedged.
+    /// Half an hour, because the point of carrying the approval in your pocket is that you can
+    /// be in a meeting when it arrives. The hook's own timeout has to be set above this or it
+    /// gives up first — `print-hook` derives it from whatever window the bridge is running.
     ///
     /// The clock starts on arrival rather than at the head of the queue. Starting it at the head
     /// would make total latency grow with queue depth and reintroduce exactly the indefinite
     /// wait that failing open exists to prevent.
-    static let window: TimeInterval = 45
+    static let defaultWindow: TimeInterval = 30 * 60
+
+    /// This bridge's window. Read from outside the actor, so it never changes after init.
+    nonisolated let window: TimeInterval
 
     private struct Pending {
         let id: String
@@ -38,9 +42,10 @@ actor Coordinator {
     private var entries: [String] = []
     private var sessions = Set<String>()
 
-    init(link: any LinkSink, log: Logger) {
+    init(link: any LinkSink, log: Logger, window: TimeInterval = Coordinator.defaultWindow) {
         self.link = link
         self.log = log
+        self.window = window
     }
 
     // MARK: - Session bookkeeping
@@ -70,7 +75,7 @@ actor Coordinator {
         }
 
         let id = Self.newRequestID()
-        let deadline = Date().addingTimeInterval(Self.window)
+        let deadline = Date().addingTimeInterval(window)
         let prompt = Prompt.truncatingHint(
             id: id,
             tool: request.toolName,
@@ -84,7 +89,7 @@ actor Coordinator {
             queue.append(Pending(id: id, prompt: prompt, continuation: continuation))
             pushSnapshot()
             Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(Self.window * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(self?.window ?? Coordinator.defaultWindow) * 1_000_000_000)
                 await self?.expire(id)
             }
         }
