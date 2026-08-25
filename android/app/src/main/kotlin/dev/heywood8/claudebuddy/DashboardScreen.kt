@@ -152,17 +152,21 @@ private fun Sessions() {
  */
 private fun describe(session: SessionSummary, now: Long): String {
     val parts = mutableListOf("running ${elapsed(now - session.started)}")
-    if (session.active > 0) parts += "last call ${elapsed(now - session.active)} ago"
+    if (session.active > 0) parts += ago("last call", now - session.active)
     parts += if (session.decided > 0) {
-        "you decided ${elapsed(now - session.decided)} ago"
+        ago("you decided", now - session.decided)
     } else {
         "you have not stepped in"
     }
     return parts.joinToString(" · ")
 }
 
+/** "just now" is already past tense; "just now ago" is not English. */
+private fun ago(label: String, seconds: Long): String =
+    if (seconds < 60) "$label just now" else "$label ${elapsed(seconds)} ago"
+
 private fun elapsed(seconds: Long): String = when {
-    seconds < 60 -> "just now"
+    seconds < 60 -> "under a minute"
     seconds < 3600 -> "${seconds / 60}m"
     else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
 }
