@@ -50,6 +50,17 @@ you already use rather than replacing them, and re-running it updates its own en
 leaving a stale one behind. `print-hook` still prints the snippet if you would rather paste it
 yourself.
 
+## What reaches the phone
+
+Only the requests Claude Code would have put in front of you anyway. The `PermissionRequest`
+hook fires when it is about to ask; anything already covered by your `permissions.allow` never
+gets that far, and neither does anything at all while the session runs in a mode that does not
+ask — `auto`, `acceptEdits`, `bypassPermissions`. A quiet phone in those modes is the system
+working, not failing.
+
+The `PostToolUse` entry approves nothing. It fires after the fact and feeds the recent-calls
+list on the dashboard, and the whole thing works without it.
+
 ## Security
 
 The phone advertises itself into the air, and a GATT server that anyone in radio range can talk
