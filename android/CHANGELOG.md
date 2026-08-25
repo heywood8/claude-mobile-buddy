@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.3.0...android-v0.4.0) (2026-08-25)
+
+
+### Features
+
+* **android:** give the decision the width, put the controls on a rail ([ab9b9a0](https://github.com/heywood8/claude-mobile-buddy/commit/ab9b9a0cf299133b93efd23aca10e5f7fbaa9865))
+* show which sessions are running and how long since you last stepped in ([4569127](https://github.com/heywood8/claude-mobile-buddy/commit/45691277fd3589946d0814c64028583acff116b5))
+
+
+### Bug Fixes
+
+* **android:** stop saying 'just now ago' ([e9a32a6](https://github.com/heywood8/claude-mobile-buddy/commit/e9a32a6cceeac2cf876141566341b3cdd036a838))
+
 ## [0.3.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.2.0...android-v0.3.0) (2026-08-25)
 
 

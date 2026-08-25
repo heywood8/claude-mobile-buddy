@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.3.0...bridge-v0.4.0) (2026-08-25)
+
+
+### Features
+
+* **bridge:** log the first sight of each session ([7d1c7b6](https://github.com/heywood8/claude-mobile-buddy/commit/7d1c7b6864ba0691c421c96281c3ae0672b6146f))
+* show which sessions are running and how long since you last stepped in ([4569127](https://github.com/heywood8/claude-mobile-buddy/commit/45691277fd3589946d0814c64028583acff116b5))
+
 ## [0.3.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.2.0...bridge-v0.3.0) (2026-08-25)
 
 
