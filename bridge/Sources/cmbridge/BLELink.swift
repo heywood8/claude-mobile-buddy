@@ -21,6 +21,11 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
     private var pendingWrites: [Data] = []
     private var writeInFlight = false
 
+    /// Distinguishes the write we are waiting on from one that has since been replaced, so a
+    /// stale timeout cannot tear down a healthy link.
+    private var writeGeneration: UInt64 = 0
+    private static let writeTimeout: TimeInterval = 10
+
     private let lock = NSLock()
     private var _isLinked = false
 
@@ -68,9 +73,27 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
         guard !writeInFlight,
               let peripheral, let rx,
               !pendingWrites.isEmpty else { return }
+
+        // CoreBluetooth will accept a write to a peripheral that has gone away and simply
+        // never acknowledge it, which leaves writeInFlight stuck and wedges every later
+        // write in silence. Checking the state turns that into a visible teardown.
+        guard peripheral.state == .connected else {
+            teardown("peripheral is \(peripheral.state.rawValue), not connected")
+            return
+        }
+
         let chunk = pendingWrites.removeFirst()
         writeInFlight = true
+        writeGeneration &+= 1
+        let generation = writeGeneration
         peripheral.writeValue(chunk, for: rx, type: .withResponse)
+
+        // Belt and braces: an acknowledgement that never arrives must not be indistinguishable
+        // from an idle link.
+        queue.asyncAfter(deadline: .now() + Self.writeTimeout) { [weak self] in
+            guard let self, self.writeInFlight, self.writeGeneration == generation else { return }
+            self.teardown("write not acknowledged in \(Int(Self.writeTimeout))s")
+        }
     }
 
     private func setLinked(_ value: Bool) {
@@ -143,6 +166,21 @@ extension BLELink: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
+        teardown(error?.localizedDescription ?? "peer closed")
+    }
+
+    /// The replacement for the callback above, which CoreBluetooth stopped calling once this
+    /// one exists. Implementing only the old one is why a phone that had been uninstalled
+    /// still counted as connected forty minutes later.
+    func centralManager(_ central: CBCentralManager,
+                        didDisconnectPeripheral peripheral: CBPeripheral,
+                        timestamp: CFAbsoluteTime,
+                        isReconnecting: Bool,
+                        error: Error?) {
+        guard !isReconnecting else {
+            log.info("peer dropped, CoreBluetooth is reconnecting")
+            return
+        }
         teardown(error?.localizedDescription ?? "peer closed")
     }
 }
