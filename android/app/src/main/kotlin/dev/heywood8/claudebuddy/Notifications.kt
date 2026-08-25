@@ -69,16 +69,17 @@ object Notifications {
         verdict: Verdict,
         label: String,
     ): Notification.Action {
-        // Explicit by construction — Intent(Context, Class) sets the component — and the
-        // PendingIntent below is FLAG_IMMUTABLE, so the notification shade cannot fill
-        // anything in. CodeQL's java/android/implicit-pendingintents flags this anyway; it
-        // does not follow the component through Kotlin's apply block. Dismissed as a false
-        // positive rather than contorting the code to satisfy the query.
-        val intent = Intent(context, DecisionReceiver::class.java).apply {
-            action = DecisionReceiver.ACTION_DECIDE
-            putExtra(DecisionReceiver.EXTRA_ID, id)
-            putExtra(DecisionReceiver.EXTRA_VERDICT, verdict.name)
-        }
+        // setClass rather than the Intent(Context, Class) constructor, which would set the
+        // same component. Spelling the target out keeps the intent visibly explicit to a
+        // reader, and to static analysis: CodeQL treats an intent as explicit only when it
+        // sees setPackage, setClass, setClassName or setComponent.
+        val intent = Intent(DecisionReceiver.ACTION_DECIDE)
+            .setClass(context, DecisionReceiver::class.java)
+            .putExtra(DecisionReceiver.EXTRA_ID, id)
+            .putExtra(DecisionReceiver.EXTRA_VERDICT, verdict.name)
+        // FLAG_IMMUTABLE means the notification shade cannot fill anything in. Worth knowing
+        // that static analysis cannot see this: CodeQL follows the flag only through a Java
+        // bitwise expression, and Kotlin's `or` is a method call, so it assumes the worst.
         val pending = PendingIntent.getBroadcast(
             context,
             (id + verdict.name).hashCode(),
@@ -104,7 +105,7 @@ object Notifications {
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
         0,
-        Intent(context, MainActivity::class.java),
+        Intent().setClass(context, MainActivity::class.java),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 }
