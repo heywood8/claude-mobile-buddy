@@ -73,7 +73,10 @@ class BuddyService : Service() {
             lastPromptId = prompt.id
             manager.cancel(Notifications.ID_APPROVAL)
         }
-        manager.notify(Notifications.ID_APPROVAL, Notifications.approval(this, prompt))
+        manager.notify(
+            Notifications.ID_APPROVAL,
+            Notifications.approval(this, prompt, waiting = snapshot.waiting),
+        )
     }
 
     private fun onLinkChange(linked: Boolean) {

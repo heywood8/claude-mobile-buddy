@@ -14,6 +14,8 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.ParcelUuid
 import android.util.Log
 
@@ -24,6 +26,12 @@ import android.util.Log
  * A transport and nothing more. It has never heard of the handshake, of keys, or of what a
  * line means — [SecurePeripheral] owns all of that, which is what keeps the protocol testable
  * without a radio.
+ *
+ * Everything runs on one private thread. GATT server callbacks arrive on binder threads while
+ * `send` is called from whichever thread tapped a button, and the write queue below is shared
+ * between them: unsynchronised, a tap that raced an incoming notification could leave
+ * `notifyInFlight` set and stall the queue until the next tap. Which looks, from the far side
+ * of the screen, exactly like a button that does nothing.
  */
 @SuppressLint("MissingPermission")
 class GattPeripheral(
@@ -34,10 +42,15 @@ class GattPeripheral(
     private val onLinkChange: (Boolean) -> Unit,
 ) {
     private val manager = context.getSystemService(BluetoothManager::class.java)
-    private var server: BluetoothGattServer? = null
-    private var tx: BluetoothGattCharacteristic? = null
-    private var peer: BluetoothDevice? = null
-    private var mtu = DEFAULT_MTU
+    private val worker = HandlerThread("cmb.gatt").apply { start() }
+    private val handler = Handler(worker.looper)
+
+    @Volatile private var server: BluetoothGattServer? = null
+    @Volatile private var tx: BluetoothGattCharacteristic? = null
+    @Volatile private var peer: BluetoothDevice? = null
+    @Volatile private var mtu = DEFAULT_MTU
+
+    /** Touched only on [handler]. */
     private val assembler = LineAssembler()
 
     /** Notifications are not fire-and-forget: the next chunk waits for the previous one. */
@@ -109,25 +122,28 @@ class GattPeripheral(
         server?.close()
         server = null
         peer = null
-        outbox.clear()
-        notifyInFlight = false
+        handler.post {
+            outbox.clear()
+            notifyInFlight = false
+        }
+        worker.quitSafely()
         onLinkChange(false)
     }
 
-    fun send(line: ByteArray) {
-        val peer = peer ?: return
-        val tx = tx ?: return
-        val bytes = line
+    fun send(line: ByteArray) = onWorker {
+        val peer = peer ?: return@onWorker
+        val tx = tx ?: return@onWorker
         val limit = (mtu - GATT_HEADER).coerceAtLeast(MIN_CHUNK)
         var offset = 0
-        while (offset < bytes.size) {
-            val end = minOf(offset + limit, bytes.size)
-            outbox.addLast(bytes.copyOfRange(offset, end))
+        while (offset < line.size) {
+            val end = minOf(offset + limit, line.size)
+            outbox.addLast(line.copyOfRange(offset, end))
             offset = end
         }
         pump(peer, tx)
     }
 
+    /** Only ever called on [handler]. */
     private fun pump(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic) {
         if (notifyInFlight) return
         val chunk = outbox.removeFirstOrNull() ?: return
@@ -152,6 +168,11 @@ class GattPeripheral(
         server?.cancelConnection(peer)
     }
 
+    /** Runs [body] on the one thread that owns the queue. */
+    private fun onWorker(body: () -> Unit) {
+        handler.post(body)
+    }
+
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
             Log.i(TAG, "advertising")
@@ -163,13 +184,13 @@ class GattPeripheral(
     }
 
     private val callback = object : BluetoothGattServerCallback() {
-        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
+        override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) = onWorker {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 // One host at a time. A second one is refused rather than interleaved:
                 // a shared queue makes it ambiguous on screen whose command is on screen.
                 if (peer != null && peer != device) {
                     server?.cancelConnection(device)
-                    return
+                    return@onWorker
                 }
                 peer = device
                 mtu = DEFAULT_MTU
@@ -182,7 +203,7 @@ class GattPeripheral(
             }
         }
 
-        override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
+        override fun onMtuChanged(device: BluetoothDevice, mtu: Int) = onWorker {
             this@GattPeripheral.mtu = mtu
             Log.i(TAG, "mtu $mtu")
         }
@@ -196,13 +217,16 @@ class GattPeripheral(
             offset: Int,
             value: ByteArray,
         ) {
-            if (characteristic.uuid == Nus.RX) {
-                for (line in assembler.feed(value)) {
-                    onLine(line)
-                }
-            }
+            // Answer first: the peer is waiting on this, and the line can be assembled after.
             if (responseNeeded) {
                 server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, null)
+            }
+            if (characteristic.uuid == Nus.RX) {
+                onWorker {
+                    for (line in assembler.feed(value)) {
+                        onLine(line)
+                    }
+                }
             }
         }
 
@@ -220,9 +244,12 @@ class GattPeripheral(
             }
         }
 
-        override fun onNotificationSent(device: BluetoothDevice, status: Int) {
+        override fun onNotificationSent(device: BluetoothDevice, status: Int) = onWorker {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "notification failed: $status")
+            }
             notifyInFlight = false
-            val tx = tx ?: return
+            val tx = tx ?: return@onWorker
             pump(device, tx)
         }
     }

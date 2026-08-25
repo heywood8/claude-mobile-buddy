@@ -49,7 +49,14 @@ class SecurePeripheral(
     }
 
     fun send(decision: Decision) {
-        val sealed = session?.seal(Wire.encodePayload(decision)) ?: return
+        val sealed = session?.seal(Wire.encodePayload(decision))
+        if (sealed == null) {
+            // Either nothing is linked or the handshake has not finished. Silence here reads
+            // as a dead button, so it is worth a line.
+            Log.w(TAG, "cannot send ${decision.decision} for ${decision.id}: no ready session")
+            return
+        }
+        Log.i(TAG, "sending ${decision.decision} for ${decision.id}")
         transport?.send(sealed)
     }
 
