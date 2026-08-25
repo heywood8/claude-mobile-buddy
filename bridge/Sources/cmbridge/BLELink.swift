@@ -88,8 +88,10 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
         let generation = writeGeneration
         peripheral.writeValue(chunk, for: rx, type: .withResponse)
 
-        // Belt and braces: an acknowledgement that never arrives must not be indistinguishable
-        // from an idle link.
+        // Not a fallback — measured on macOS 26 this is the only thing that fires. Killing the
+        // peer app produced no disconnect callback at all, old or new, and the link was
+        // declared dead 16 seconds later purely because a keepalive went unacknowledged.
+        // Do not remove this as redundant with the delegate above.
         queue.asyncAfter(deadline: .now() + Self.writeTimeout) { [weak self] in
             guard let self, self.writeInFlight, self.writeGeneration == generation else { return }
             self.teardown("write not acknowledged in \(Int(Self.writeTimeout))s")
@@ -172,6 +174,10 @@ extension BLELink: CBCentralManagerDelegate {
     /// The replacement for the callback above, which CoreBluetooth stopped calling once this
     /// one exists. Implementing only the old one is why a phone that had been uninstalled
     /// still counted as connected forty minutes later.
+    ///
+    /// Worth knowing that this alone did not fix it: force-stopping the peer app produced no
+    /// disconnect callback of either shape. The write watchdog in `pumpWrites` is what
+    /// actually catches a peer that has gone.
     func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral peripheral: CBPeripheral,
                         timestamp: CFAbsoluteTime,
