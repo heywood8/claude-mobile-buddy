@@ -53,6 +53,19 @@ struct QueueTests {
         #expect(link.snapshotCount == 0)
     }
 
+    @Test("leaves a question that cannot be answered remotely in the terminal")
+    func skipsUnanswerableTools() async {
+        let link = FakeLink()
+        let coordinator = Coordinator(link: link, log: Logger())
+
+        // Approving this would not answer anything, and while it sat on the phone's one
+        // screen it would hide approvals that could actually be given.
+        let response = await coordinator.decide(request(tool: "AskUserQuestion", hint: "which?"))
+
+        #expect(response.isNoDecision)
+        #expect(link.snapshotCount == 0)
+    }
+
     @Test("shows the first request and counts the rest")
     func queuesInArrivalOrder() async throws {
         let link = FakeLink()

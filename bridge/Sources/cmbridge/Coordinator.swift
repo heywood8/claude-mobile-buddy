@@ -29,6 +29,15 @@ actor Coordinator {
     /// This bridge's window. Read from outside the actor, so it never changes after init.
     nonisolated let window: TimeInterval
 
+    /// Tools whose permission prompt cannot be usefully answered from a phone.
+    ///
+    /// Approving AskUserQuestion does not answer the question — it only lets the terminal ask
+    /// it. Sending that to the phone is not merely useless: the screen shows one request at a
+    /// time, so it would sit there blocking approvals that *can* be answered remotely.
+    nonisolated let skippedTools: Set<String>
+
+    static let defaultSkippedTools: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
+
     private struct Pending {
         let id: String
         let prompt: Prompt
@@ -42,10 +51,16 @@ actor Coordinator {
     private var entries: [String] = []
     private var sessions = Set<String>()
 
-    init(link: any LinkSink, log: Logger, window: TimeInterval = Coordinator.defaultWindow) {
+    init(
+        link: any LinkSink,
+        log: Logger,
+        window: TimeInterval = Coordinator.defaultWindow,
+        skippedTools: Set<String> = Coordinator.defaultSkippedTools
+    ) {
         self.link = link
         self.log = log
         self.window = window
+        self.skippedTools = skippedTools
     }
 
     // MARK: - Session bookkeeping
@@ -69,6 +84,10 @@ actor Coordinator {
     // MARK: - Approvals
 
     func decide(_ request: HookRequest) async -> HookResponse {
+        guard !skippedTools.contains(request.toolName) else {
+            log.decision("\(request.toolName): not answerable from a phone, deferring to terminal")
+            return .noDecision
+        }
         guard link.isLinked else {
             log.decision("\(request.toolName): no phone linked, deferring to terminal")
             return .noDecision

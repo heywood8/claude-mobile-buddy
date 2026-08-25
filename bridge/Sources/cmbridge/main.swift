@@ -25,6 +25,8 @@ let usePNG = takeFlag("--png")
 let settingsPath = takeValue("--settings").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
 let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
+let skippedTools: Set<String> = takeValue("--skip-tools")
+    .map { Set($0.split(separator: ",").map(String.init)) } ?? Coordinator.defaultSkippedTools
 
 func hookSnippet(port: Int, window: TimeInterval) -> String {
     let base = "http://127.0.0.1:\(port)"
@@ -186,7 +188,8 @@ case "run", nil:
     let transport = BLELink(log: log)
     let link = SecureLink(transport: transport, identity: identity, log: log)
     log.info("approval window \(Int(window) / 60) min \(Int(window) % 60) s")
-    let coordinator = Coordinator(link: link, log: log, window: window)
+    let coordinator = Coordinator(
+        link: link, log: log, window: window, skippedTools: skippedTools)
 
     link.onLine = { line in
         do {
@@ -222,8 +225,9 @@ default:
     print("""
     cmbridge — Claude Code approvals on your phone
 
-      cmbridge run [--port N] [--window SECONDS]
-                                       run the bridge (port 8787, window 30 min)
+      cmbridge run [--port N] [--window SECONDS] [--skip-tools A,B]
+                                       run the bridge (port 8787, window 30 min;
+                                       AskUserQuestion and ExitPlanMode stay in the terminal)
       cmbridge pair [--png] [--rotate] [--url]
                                        show the pairing code; --png opens an image
                                        instead of drawing it in the terminal
