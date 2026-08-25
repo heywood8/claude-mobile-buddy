@@ -100,6 +100,9 @@ actor Coordinator {
             session.active = now
             sessions[id] = session
         } else {
+            // Logged once per session, so it is possible to tell "the hook never fired" from
+            // "the hook fired and the phone is not showing it" without guessing.
+            log.info("session \(id.prefix(8)) seen at \(cwd)")
             sessions[id] = Session(cwd: cwd, started: now, active: now, decided: 0)
         }
     }
