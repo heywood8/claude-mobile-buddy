@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -165,16 +166,29 @@ private fun Dashboard(
                 style = MaterialTheme.typography.bodyMedium,
             )
         } else {
-            for (host in paired) {
-                Text("Paired: ${host.name.ifEmpty { host.hostId.take(8) }}",
-                    style = MaterialTheme.typography.bodySmall)
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Paired: " + paired.joinToString { it.name.ifEmpty { it.hostId.take(8) } },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                // Still reachable — re-pairing after a rotated key, or adding a second Mac —
+                // but out of the way of the buttons you actually press.
+                TextButton(onClick = onPair) { Text("Re-pair") }
             }
         }
 
+        // Only what does something right now. A Start button next to a live connection is a
+        // control that cannot be pressed meaningfully, and one of those teaches you to stop
+        // reading the row.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onStart, enabled = paired.isNotEmpty()) { Text("Start") }
-            OutlinedButton(onClick = onStop) { Text("Stop") }
-            OutlinedButton(onClick = onPair) { Text("Pair") }
+            when {
+                paired.isEmpty() -> Button(onClick = onPair) { Text("Pair") }
+                BuddyState.running -> OutlinedButton(onClick = onStop) { Text("Stop") }
+                else -> Button(onClick = onStart) { Text("Start") }
+            }
             OutlinedButton(onClick = onHistory) { Text("History") }
         }
 
