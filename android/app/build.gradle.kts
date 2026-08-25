@@ -1,3 +1,18 @@
+import java.util.Properties
+
+/**
+ * Signing material lives outside the repository, in ~/.config/claude-mobile-buddy, next to the
+ * bridge's own identity. Nothing here reads a password from the project tree, so there is no
+ * file anyone can commit by accident.
+ *
+ * Without it the release build is simply unsigned: CI can still compile and check, it just
+ * cannot produce something installable.
+ */
+val signingConfigFile = File(System.getProperty("user.home"), ".config/claude-mobile-buddy/signing.properties")
+val signingProps = Properties().apply {
+    if (signingConfigFile.isFile) signingConfigFile.inputStream().use(::load)
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -20,9 +35,32 @@ android {
         versionName = "0.2.0" // x-release-please-version
     }
 
+    signingConfigs {
+        if (signingProps.isNotEmpty()) {
+            create("release") {
+                storeFile = File(
+                    signingProps.getProperty("storeFile")
+                        ?: File(signingConfigFile.parentFile, "release.jks").path
+                )
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias") ?: "claude-buddy"
+                keyPassword = signingProps.getProperty("keyPassword")
+                    ?: signingProps.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Not debuggable, which is the whole point: the app holds a key that authorises
+            // running commands on a workstation, and a debuggable app hands its own identity
+            // to anyone with adb access.
+            isDebuggable = false
+            // R8 is off until the keep rules for kotlinx.serialization and ZXing are written
+            // and verified on a device. Shipping a silently broken decoder would be worse
+            // than shipping a larger APK.
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

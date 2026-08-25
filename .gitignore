@@ -28,3 +28,7 @@ secrets/
 # Vendored agent skills — reinstall from skills-lock.json
 .agents/
 .claude/skills/
+
+# Signing material never belongs in the tree; it lives in ~/.config/claude-mobile-buddy
+signing.properties
+*.jks
