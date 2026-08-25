@@ -116,31 +116,92 @@ enum HookInstaller {
     }
 }
 
-/// A diff that shows only what changed, by trimming the identical head and tail.
+/// A line diff over a longest common subsequence.
 ///
-/// Enough for insertions into a settings file, and small enough to read — which is the point:
-/// a diff nobody reads is not a confirmation.
+/// The naive version — trim the common head, trim the common tail, print the rest as removed
+/// then added — misreports any insertion that lands in the middle: everything after it fails
+/// to line up and gets printed twice, once as a deletion and once as an addition. Untouched
+/// configuration then looks rewritten, which is exactly the alarm a confirmation prompt must
+/// not raise falsely.
 enum LineDiff {
-    static func render(before: String, after: String, context: Int = 3) -> String {
+    enum Edit: Equatable {
+        case same(String)
+        case removed(String)
+        case added(String)
+    }
+
+    static func edits(before: String, after: String) -> [Edit] {
         let old = before.components(separatedBy: "\n")
         let new = after.components(separatedBy: "\n")
 
-        var head = 0
-        while head < old.count, head < new.count, old[head] == new[head] { head += 1 }
+        // Classic LCS table. The files here are a few hundred lines, so the quadratic cost is
+        // irrelevant and the correctness is easy to see.
+        var lengths = [[Int]](
+            repeating: [Int](repeating: 0, count: new.count + 1), count: old.count + 1)
+        for i in stride(from: old.count - 1, through: 0, by: -1) {
+            for j in stride(from: new.count - 1, through: 0, by: -1) {
+                lengths[i][j] = old[i] == new[j]
+                    ? lengths[i + 1][j + 1] + 1
+                    : max(lengths[i + 1][j], lengths[i][j + 1])
+            }
+        }
 
-        var tail = 0
-        while tail < old.count - head, tail < new.count - head,
-              old[old.count - 1 - tail] == new[new.count - 1 - tail] { tail += 1 }
+        var result: [Edit] = []
+        var i = 0, j = 0
+        while i < old.count, j < new.count {
+            if old[i] == new[j] {
+                result.append(.same(old[i]))
+                i += 1
+                j += 1
+            } else if lengths[i + 1][j] >= lengths[i][j + 1] {
+                result.append(.removed(old[i]))
+                i += 1
+            } else {
+                result.append(.added(new[j]))
+                j += 1
+            }
+        }
+        while i < old.count { result.append(.removed(old[i])); i += 1 }
+        while j < new.count { result.append(.added(new[j])); j += 1 }
+        return result
+    }
 
-        let removed = old[head..<(old.count - tail)]
-        let added = new[head..<(new.count - tail)]
+    /// Changed lines with a few lines of context, and a marker where untouched runs are elided.
+    static func render(before: String, after: String, context: Int = 3) -> String {
+        let script = edits(before: before, after: after)
+        let changed = script.indices.filter { if case .same = script[$0] { return false } else { return true } }
+        guard let first = changed.first else { return "" }
+
+        var keep = Set<Int>()
+        for index in changed {
+            for nearby in max(0, index - context)...min(script.count - 1, index + context) {
+                keep.insert(nearby)
+            }
+        }
 
         var lines: [String] = []
-        for line in old[max(0, head - context)..<head] { lines.append("  " + line) }
-        for line in removed { lines.append("- " + line) }
-        for line in added { lines.append("+ " + line) }
-        let tailStart = old.count - tail
-        for line in old[tailStart..<min(old.count, tailStart + context)] { lines.append("  " + line) }
+        var previous = first
+        for index in keep.sorted() {
+            if index > previous + 1 {
+                lines.append("  … \(index - previous - 1) unchanged lines")
+            }
+            switch script[index] {
+            case .same(let text): lines.append("  " + text)
+            case .removed(let text): lines.append("- " + text)
+            case .added(let text): lines.append("+ " + text)
+            }
+            previous = index
+        }
         return lines.joined(separator: "\n")
+    }
+
+    /// How many lines the change actually touches, for a one-line summary.
+    static func counts(before: String, after: String) -> (added: Int, removed: Int) {
+        var added = 0, removed = 0
+        for edit in edits(before: before, after: after) {
+            if case .added = edit { added += 1 }
+            if case .removed = edit { removed += 1 }
+        }
+        return (added, removed)
     }
 }

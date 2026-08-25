@@ -141,6 +141,48 @@ struct HookInstallerTests {
         #expect(!diff.contains("  a"))
     }
 
+    @Test("does not report untouched lines after an insertion as rewritten")
+    func insertionKeepsTheTailAsContext() {
+        // The failure this replaces: trimming a common head and tail cannot align anything
+        // after an insertion in the middle, so the rest of the file printed twice — once as
+        // removed, once as added. Someone reading it sees their own configuration apparently
+        // being deleted, which is the one thing a confirmation prompt must never fake.
+        let before = "head\nkeep1\nkeep2\nkeep3\ntail"
+        let after = "head\nINSERTED\nkeep1\nkeep2\nkeep3\ntail"
+
+        let script = LineDiff.edits(before: before, after: after)
+        #expect(script.filter { if case .removed = $0 { return true } else { return false } }.isEmpty)
+        #expect(script.filter { if case .added = $0 { return true } else { return false } }
+            == [.added("INSERTED")])
+
+        let counts = LineDiff.counts(before: before, after: after)
+        #expect(counts == (added: 1, removed: 0))
+    }
+
+    @Test("reports an appended hook as pure addition on a realistic file")
+    func realisticMergeAddsOnly() throws {
+        // The shape that produced the bad diff: our entry is appended to PostToolUse, and the
+        // user's own PreToolUse block sits after it.
+        let path = try write("""
+        {
+          "hooks": {
+            "PostToolUse": [
+              { "matcher": "Write|Edit", "hooks": [{ "type": "command", "command": "fmt" }] }
+            ],
+            "PreToolUse": [
+              { "matcher": "Bash", "hooks": [{ "type": "command", "command": "guard" }] }
+            ]
+          }
+        }
+        """)
+        defer { try? FileManager.default.removeItem(at: path) }
+
+        let plan = try HookInstaller.plan(path: path, port: 8787, window: 1800)
+        let counts = LineDiff.counts(before: plan.before, after: plan.after)
+        #expect(counts.removed == 0)
+        #expect(counts.added > 0)
+    }
+
     // MARK: - Helpers
 
     private func write(_ contents: String) throws -> URL {

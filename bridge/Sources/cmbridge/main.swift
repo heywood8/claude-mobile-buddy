@@ -108,7 +108,8 @@ case "install-hook":
             print("Already installed and up to date: \(plan.path.path)")
             break
         }
-        print("Changes to \(plan.path.path):")
+        let counts = LineDiff.counts(before: plan.before, after: plan.after)
+        print("Changes to \(plan.path.path): +\(counts.added) −\(counts.removed)")
         print()
         print(LineDiff.render(before: plan.before, after: plan.after))
         print()
