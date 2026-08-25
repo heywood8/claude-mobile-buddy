@@ -29,38 +29,45 @@ struct QRCodeTests {
         #expect(!isFinder(modules, atRow: size - 7, column: size - 7))
     }
 
-    @Test("renders half-block rows with a quiet zone")
-    func rendersHalfBlocks() throws {
-        let rendered = try #require(QRCode.render("cmb://pair?h=abc&k=def&n=Test"))
+    @Test("renders one module per row with a quiet zone")
+    func rendersFullBlocks() throws {
+        let payload = "cmb://pair?h=abc&k=def&n=Test"
+        let rendered = try #require(QRCode.render(payload))
         let lines = rendered.split(separator: "\n").map(String.init)
-        let modules = try #require(QRCode.matrix(for: "cmb://pair?h=abc&k=def&n=Test"))
+        let modules = try #require(QRCode.matrix(for: payload))
 
-        // Two module rows per terminal row, plus the quiet zone above and below.
+        // One terminal row per module row, quiet zone above and below.
         let paddedRows = modules.count + QRCode.quietZone * 2
-        #expect(lines.count == (paddedRows + 1) / 2)
+        #expect(lines.count == paddedRows)
+
+        // Half blocks are what a mismatched line height turns into seams. Their absence is
+        // the property under test, not an implementation detail.
+        #expect(!rendered.contains("\u{2580}"))
+        #expect(!rendered.contains("\u{2584}"))
 
         // The first row is entirely quiet zone: no ink anywhere in it.
         let first = try #require(lines.first)
         #expect(!first.contains("\u{2588}"))
-        #expect(!first.contains("\u{2580}"))
-        #expect(!first.contains("\u{2584}"))
 
         // Somewhere in the middle there has to be ink, or we are rendering a blank rectangle.
         #expect(lines.contains { $0.contains("\u{2588}") })
     }
 
-    @Test("fits an eighty-column terminal")
-    func fitsStandardTerminal() throws {
-        // A pairing code that wraps is a pairing code nothing can scan, and eighty columns is
-        // still what a freshly opened Terminal window gives you.
+    @Test("stays inside a wide terminal")
+    func fitsWideTerminal() throws {
+        // A pairing code that wraps is a pairing code nothing can scan. Two characters per
+        // module costs width, which is the price of surviving a terminal whose line height
+        // does not match its font — see the note on QRCode. A hundred and twenty columns is
+        // the ceiling; anything approaching it means the payload has grown too long.
         let payload = PairingCode(
             hostID: "0123456789abcdef0123456789abcdef",
             key: Data(repeating: 0xAB, count: 32),
             hostName: "MSK-JDW962F4JG").url
 
         let modules = try #require(QRCode.matrix(for: payload))
-        let columns = modules.count + QRCode.quietZone * 2
-        #expect(columns <= 80, "payload of \(payload.count) chars rendered \(modules.count) modules")
+        // Two characters per module, plus the quiet zone on both sides.
+        let columns = (modules.count + QRCode.quietZone * 2) * 2
+        #expect(columns <= 120, "payload of \(payload.count) chars rendered \(modules.count) modules")
     }
 
     @Test("renders dark on light rather than inverted")

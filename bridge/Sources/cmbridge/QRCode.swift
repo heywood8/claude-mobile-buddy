@@ -3,10 +3,26 @@ import CoreImage
 
 /// Renders a QR code as text, so pairing needs no second screen and nothing typed.
 ///
-/// CoreImage is a system framework, which keeps this dependency-free. The code is drawn with
-/// half-block characters so one terminal row carries two module rows — a full-block rendering
-/// comes out twice as tall as it needs to be and stops fitting in a window.
+/// CoreImage is a system framework, which keeps this dependency-free.
+///
+/// One module per terminal row, two characters wide, rather than the half-block trick that
+/// packs two module rows into one row. Half blocks are half the size, but they only survive a
+/// terminal whose line height matches its font exactly. Measured on a real one: line height
+/// 29.9px, `█` inked for 25px, leaving a 5px seam. Against a 15px half-block module that seam
+/// is a third of the module and lands where a decoder samples; against a 30px full-block
+/// module it is 17% and lands on the boundary, where nothing reads.
 enum QRCode {
+    /// Characters per module. A terminal cell is about twice as tall as it is wide, so two
+    /// of them make a module roughly square.
+    static let cellsPerModule = 2
+
+    /// Columns the rendered code needs. A code that wraps is unreadable, and wrapping is
+    /// invisible until a camera fails to see anything.
+    static func columns(for text: String) -> Int? {
+        guard let modules = matrix(for: text) else { return nil }
+        return (modules.count + quietZone * 2) * cellsPerModule
+    }
+
     /// Modules of white space around the code. The spec asks for four; scanners get unhappy
     /// with less, especially against a dark terminal.
     static let quietZone = 4
@@ -82,25 +98,10 @@ enum QRCode {
         let reset = "\u{1B}[0m"
         let blackOnWhite = "\u{1B}[30;47m"
 
-        var lines: [String] = []
-        var row = 0
-        while row < padded.count {
-            let top = padded[row]
-            let bottom = row + 1 < padded.count
-                ? padded[row + 1]
-                : [Bool](repeating: false, count: width)
-            var line = blackOnWhite
-            for column in 0..<width {
-                switch (top[column], bottom[column]) {
-                case (true, true): line += "\u{2588}"
-                case (true, false): line += "\u{2580}"
-                case (false, true): line += "\u{2584}"
-                case (false, false): line += " "
-                }
-            }
-            lines.append(line + reset)
-            row += 2
-        }
-        return lines.joined(separator: "\n")
+        // Two characters per module keeps it roughly square: a terminal cell is about twice
+        // as tall as it is wide.
+        return padded.map { row in
+            blackOnWhite + row.map { $0 ? "\u{2588}\u{2588}" : "  " }.joined() + reset
+        }.joined(separator: "\n")
     }
 }

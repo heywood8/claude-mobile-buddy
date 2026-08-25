@@ -67,6 +67,13 @@ case "pair":
             log.error("could not render the QR code")
             exit(1)
         }
+        if let needed = QRCode.columns(for: code.url),
+           let available = terminalColumns(),
+           available < needed {
+            log.error("terminal is \(available) columns, the code needs \(needed)")
+            log.error("widen the window and run this again — a wrapped code cannot be scanned")
+            exit(1)
+        }
         print()
         print(rendered)
         print()
@@ -154,6 +161,13 @@ default:
     The bridge never edits ~/.claude/settings.json for you.
     """)
     exit(2)
+}
+
+/// How wide the terminal is, or nil when stdout is not one.
+func terminalColumns() -> Int? {
+    var size = winsize()
+    guard ioctl(STDOUT_FILENO, UInt(TIOCGWINSZ), &size) == 0, size.ws_col > 0 else { return nil }
+    return Int(size.ws_col)
 }
 
 /// Is something answering on the bridge's port right now?
