@@ -163,6 +163,37 @@ private final class HookHandler: ChannelInboundHandler {
             }
             return Data("{}".utf8)
 
+        case "/prompt":
+            if let request = HookRequest(body: payload) {
+                await coordinator.noteUserPrompt(
+                    sessionID: request.sessionID,
+                    cwd: request.cwd,
+                    text: request.userPrompt)
+            }
+            return Data("{}".utf8)
+
+        case "/permission-denied":
+            // Auto mode turning something down. The tool never runs, so this is the only word
+            // we get that it was refused rather than still being considered.
+            if let request = HookRequest(body: payload) {
+                await coordinator.resolveElsewhere(
+                    sessionID: request.sessionID,
+                    tool: request.toolName,
+                    hint: request.hint,
+                    how: "denied")
+            }
+            return Data("{}".utf8)
+
+        case "/turn-end":
+            // Claude has finished answering, so anything it was still asking about was settled
+            // somewhere we cannot see. Weaker than the tool-use signal, and the only one that
+            // covers a request denied by hand in the terminal — a refused tool never runs, so
+            // it produces no event of its own.
+            if let request = HookRequest(body: payload) {
+                await coordinator.turnEnded(request.sessionID)
+            }
+            return Data("{}".utf8)
+
         case "/health":
             return Data("{\"ok\":true}".utf8)
 

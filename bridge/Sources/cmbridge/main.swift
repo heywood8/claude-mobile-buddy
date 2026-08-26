@@ -58,6 +58,19 @@ func hookSnippet(port: Int, window: TimeInterval) -> String {
         "PostToolUse": [
           { "matcher": "Bash|Write|Edit|Task",
             "hooks": [ { "type": "http", "url": "\(base)/tool-use", "timeout": 5 } ] }
+        ],
+        "PostToolUseFailure": [
+          { "matcher": "Bash|Write|Edit|Task",
+            "hooks": [ { "type": "http", "url": "\(base)/tool-use", "timeout": 5 } ] }
+        ],
+        "UserPromptSubmit": [
+          { "hooks": [ { "type": "http", "url": "\(base)/prompt", "timeout": 5 } ] }
+        ],
+        "PermissionDenied": [
+          { "hooks": [ { "type": "http", "url": "\(base)/permission-denied", "timeout": 5 } ] }
+        ],
+        "Stop": [
+          { "hooks": [ { "type": "http", "url": "\(base)/turn-end", "timeout": 5 } ] }
         ]
       }
     }

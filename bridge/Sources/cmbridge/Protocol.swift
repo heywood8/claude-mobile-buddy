@@ -49,6 +49,38 @@ struct SessionSummary: Codable, Equatable {
     /// be read, which is not distinguishable from a session that has used none — and does
     /// not need to be, for a number on a dashboard.
     var tokens: Int = 0
+    /// The last thing you asked this session for, trimmed to a glance. Empty until it has
+    /// heard one — a session resumed mid-flight has been given nothing yet as far as the
+    /// bridge knows, and inventing something would be worse than a blank line.
+    var task: String = ""
+
+    /// A prompt is a paragraph and this is a phone. One line of it is the reminder; the rest
+    /// is in the terminal where you wrote it.
+    static let taskLimit = 120
+
+    static func trimTask(_ text: String) -> String {
+        let oneLine = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard oneLine.count > taskLimit else { return oneLine }
+        return String(oneLine.prefix(taskLimit)) + "…"
+    }
+}
+
+/// A decision that was made somewhere other than the phone.
+///
+/// There is no hook event for "the user answered the prompt in the terminal" — the flow is
+/// `PreToolUse` → `PermissionRequest` → the person types something → `PostToolUse`, and nothing
+/// in between reaches us. So a tool that ran is the proof that it was allowed, and the phone is
+/// told about it so the crab can react to what you did over there.
+struct Resolution: Codable, Equatable {
+    let id: String
+    /// Whose request it was, so the right session's pet is the one that reacts.
+    let session: String
+    /// `allowed`, `denied`, or `gone` when the request went away without saying which.
+    let how: String
+    /// Host clock, to be compared against the snapshot's own `now`.
+    let at: Int
 }
 
 /// Complete state, not a delta. Sent on change and as a keepalive.
@@ -68,11 +100,13 @@ struct Snapshot: Codable, Equatable {
     /// Field names follow the maker specification.
     var tokens: Int = 0
     var tokensToday: Int = 0
+    /// The last decision taken anywhere but here, so the phone can show that it happened.
+    var resolved: Resolution?
 
     static let keepalive: TimeInterval = 10
 
     enum CodingKeys: String, CodingKey {
-        case t, total, running, waiting, msg, entries, prompt, now, sessions, tokens
+        case t, total, running, waiting, msg, entries, prompt, now, sessions, tokens, resolved
         case tokensToday = "tokens_today"
     }
 }

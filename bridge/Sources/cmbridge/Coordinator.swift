@@ -55,6 +55,8 @@ actor Coordinator {
         var decided: Int
         /// Tokens the model has processed for this session, as far as its transcript says.
         var tokens: Int = 0
+        /// The last thing you asked it for.
+        var task: String = ""
     }
 
     private var queue: [Pending] = []
@@ -69,6 +71,10 @@ actor Coordinator {
     /// on SessionEnd, taking their tokens with them — so the day has to be remembered against
     /// something that stays.
     private var transcriptDay: [String: Int] = [:]
+
+    /// The last decision taken anywhere but the phone. Kept until something replaces it; the
+    /// phone decides for itself how long it is still worth reacting to.
+    private var resolved: Resolution?
 
     init(
         link: any LinkSink,
@@ -101,19 +107,61 @@ actor Coordinator {
 
     func recordToolUse(sessionID: String, cwd: String, tool: String, hint: String) {
         // A tool that has just run was allowed by somebody, and if it is still on the phone
-        // then that somebody was the terminal. Waiting for the hook's own connection to drop
-        // is the correct signal and an unhurried one — Claude Code can hold it open long after
-        // the decision is made, and a card you cannot answer any more is worse than no card.
-        if let stale = queue.first(where: {
-            $0.sessionID == sessionID && $0.prompt.tool == tool && $0.prompt.hint == hint
-        }) {
-            withdraw(stale.id, reason: "answered in the terminal")
-        }
+        // then that somebody was the terminal. There is no event for the moment a person
+        // answers the prompt over there — the flow is PreToolUse, PermissionRequest, silence,
+        // PostToolUse — so the tool having run is the earliest proof available, and it arrives
+        // only once the tool finishes. A ninety-second command is a ninety-second stale card,
+        // and nothing in the hook API can shorten that.
+        resolveElsewhere(sessionID: sessionID, tool: tool, hint: hint, how: "allowed")
 
         entries.insert(entryLine(tool: tool, hint: hint), at: 0)
         if entries.count > Self.entryLimit { entries.removeLast(entries.count - Self.entryLimit) }
         touch(sessionID, cwd: cwd)
         pushSnapshot()
+    }
+
+    /// What you last asked a session to do.
+    ///
+    /// The tool calls say what it is doing; this says what it was told to do, which is the
+    /// thing you have forgotten by the time the phone buzzes an hour later.
+    func noteUserPrompt(sessionID: String, cwd: String, text: String) {
+        let task = SessionSummary.trimTask(text)
+        guard !task.isEmpty else { return }
+        touch(sessionID, cwd: cwd)
+        sessions[sessionID]?.task = task
+        pushSnapshot()
+    }
+
+    /// Drops a queued request that somebody has already answered somewhere else, and remembers
+    /// which way it went so the phone can show it.
+    func resolveElsewhere(sessionID: String, tool: String, hint: String, how: String) {
+        guard let stale = queue.first(where: {
+            $0.sessionID == sessionID && $0.prompt.tool == tool &&
+                Self.sameCommand($0.prompt.hint, hint)
+        }) else { return }
+
+        resolved = Resolution(id: stale.id, session: sessionID, how: how, at: Self.now())
+        withdraw(stale.id, reason: "\(how) in the terminal")
+    }
+
+    /// The turn is over, so nothing it was asking about is still being waited on.
+    ///
+    /// Weaker than the tool-use signal and worth having anyway: a request denied in the
+    /// terminal produces no event of its own — the tool never runs — and would otherwise sit
+    /// on the phone until the window ran out.
+    func turnEnded(_ sessionID: String) {
+        for pending in queue where pending.sessionID == sessionID {
+            resolved = Resolution(id: pending.id, session: sessionID, how: "gone", at: Self.now())
+            withdraw(pending.id, reason: "the turn ended without it")
+        }
+    }
+
+    /// The command as the phone was shown it may have been truncated; the one reported after
+    /// the fact never is.
+    private static func sameCommand(_ shown: String, _ reported: String) -> Bool {
+        if shown == reported { return true }
+        let trimmed = shown.hasSuffix("…") ? String(shown.dropLast()) : shown
+        return !trimmed.isEmpty && reported.hasPrefix(trimmed)
     }
 
     /// Sessions are also learned from any hook that mentions one. SessionStart does not always
@@ -321,12 +369,14 @@ actor Coordinator {
                         started: session.started,
                         active: session.active,
                         decided: session.decided,
-                        tokens: session.tokens)
+                        tokens: session.tokens,
+                        task: session.task)
                 }
                 // Stable order, so the list on the phone does not reshuffle every keepalive.
                 .sorted { $0.started < $1.started },
             tokens: sessions.values.reduce(0) { $0 + $1.tokens },
-            tokensToday: tokensToday())
+            tokensToday: tokensToday(),
+            resolved: resolved)
         guard let data = try? LineCodec.encode(snapshot) else { return }
         link.send(data)
     }
