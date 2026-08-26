@@ -22,6 +22,10 @@ object BuddyState {
     var linked by mutableStateOf(false)
         private set
 
+    /** Which bridge is on the other end, so the one you are about to forget can say so. */
+    var linkedHost by mutableStateOf<String?>(null)
+        private set
+
     var running by mutableStateOf(false)
         private set
 
@@ -38,12 +42,21 @@ object BuddyState {
     @Volatile
     var sink: ((Decision, String) -> Unit)? = null
 
+    /** Set by the service while it holds the link. */
+    @Volatile
+    var onRevoke: ((String) -> Unit)? = null
+
     fun update(value: Snapshot) = main.post { snapshot = value }
 
     fun setLinked(value: Boolean) = main.post {
         linked = value
-        if (!value) snapshot = null
+        if (!value) {
+            snapshot = null
+            linkedHost = null
+        }
     }
+
+    fun setLinkedHost(hostId: String?) = main.post { linkedHost = hostId }
 
     fun setRunning(value: Boolean) = main.post { running = value }
 
@@ -55,6 +68,14 @@ object BuddyState {
 
     fun answer(id: String, verdict: Verdict, source: String) {
         sink?.invoke(Decision(id = id, decision = verdict), source)
+    }
+
+    /**
+     * Drops the live link if it belongs to [hostId]. Removing the keyring entry is the
+     * caller's job and has to happen too — this only ends the session that entry authorised.
+     */
+    fun revoke(hostId: String) {
+        onRevoke?.invoke(hostId)
     }
 
     object Source {

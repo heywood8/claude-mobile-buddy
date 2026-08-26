@@ -90,6 +90,11 @@ to would be a remote control for approving shell commands on your workstation. S
 - Approving requires unlocking the phone. On the lock screen you can see that something is
   waiting, not what it wants to run.
 - Both sides journal every decision, including the ones that timed out.
+- A bridge can be taken away. **Manage** on the dashboard lists what is paired and forgets one
+  after asking; forgetting drops the live link on the spot rather than waiting for it to end,
+  because the session keys were derived at handshake time and outlive the keyring entry they
+  came from. Rotating a key is the same gesture from the other end: `cmbridge pair --rotate`
+  makes a new one, and scanning it replaces the entry instead of adding a second.
 
 ## Status
 

@@ -42,6 +42,7 @@ fun DashboardScreen(
     onStop: () -> Unit,
     onPair: () -> Unit,
     onHistory: () -> Unit,
+    onHosts: () -> Unit,
     awake: Boolean,
     onAwakeChange: (Boolean) -> Unit,
 ) {
@@ -64,7 +65,7 @@ fun DashboardScreen(
                     Modifier.width(320.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Controls(onStart, onStop, onPair, onHistory, awake, onAwakeChange)
+                    Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
                 }
             }
         } else {
@@ -75,7 +76,7 @@ fun DashboardScreen(
                 PendingDecision()
                 Status()
                 Sessions()
-                Controls(onStart, onStop, onPair, onHistory, awake, onAwakeChange)
+                Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
                 RecentCalls()
             }
         }
@@ -185,6 +186,7 @@ private fun Controls(
     onStop: () -> Unit,
     onPair: () -> Unit,
     onHistory: () -> Unit,
+    onHosts: () -> Unit,
     awake: Boolean,
     onAwakeChange: (Boolean) -> Unit,
 ) {
@@ -207,9 +209,10 @@ private fun Controls(
                 "Paired: " + paired.joinToString { it.name.ifEmpty { it.hostId.take(8) } },
                 style = MaterialTheme.typography.bodySmall,
             )
-            // Still reachable — a rotated key, or a second Mac — but out of the way of the
-            // buttons actually pressed.
-            TextButton(onClick = onPair) { Text("Re-pair") }
+            // Rotating a key, adding a second Mac, taking one away: rare, and one of them
+            // wants a confirmation dialog. All of it lives a tap further in, out of the way
+            // of the buttons actually pressed.
+            TextButton(onClick = onHosts) { Text("Manage") }
         }
     }
 

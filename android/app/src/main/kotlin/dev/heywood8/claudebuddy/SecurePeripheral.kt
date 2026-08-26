@@ -29,6 +29,17 @@ class SecurePeripheral(
     val host: PairedHost?
         get() = session?.host
 
+    /**
+     * The same thing as an id, readable from any thread.
+     *
+     * `session` is only ever touched on the transport's own thread; the UI needs to know which
+     * bridge is live in order to warn that forgetting it will cut the link, and reading it
+     * through `session` from the main thread is the race we already paid for once.
+     */
+    @Volatile
+    var linkedHostId: String? = null
+        private set
+
     fun start(): Boolean {
         if (Keyring.hosts(context).isEmpty()) {
             // Advertising with an empty keyring can only ever end in unknown_host. Better to
@@ -43,9 +54,23 @@ class SecurePeripheral(
 
     fun stop() {
         session = null
+        linkedHostId = null
         setReady(false)
         transport?.stop()
         transport = null
+    }
+
+    /**
+     * Drops the link if it belongs to [hostId].
+     *
+     * Deleting the keyring entry does not end the session it authorised: the keys in use were
+     * derived at handshake time and live in memory until the peer goes away. Without this, a
+     * bridge you just revoked keeps approving things until it happens to disconnect.
+     */
+    fun revoke(hostId: String) {
+        if (linkedHostId != hostId) return
+        Log.i(TAG, "revoked $hostId — dropping the live session")
+        transport?.disconnect()
     }
 
     fun send(decision: Decision) {
@@ -73,6 +98,7 @@ class SecurePeripheral(
             )
         } else {
             session = null
+            linkedHostId = null
             setReady(false)
         }
     }
@@ -84,6 +110,7 @@ class SecurePeripheral(
                 is SessionOutput.Send -> transport?.send(output.line)
                 is SessionOutput.Ready -> {
                     Log.i(TAG, "session ready with ${session.host?.name}, channel encrypted")
+                    linkedHostId = session.host?.hostId
                     setReady(true)
                 }
                 is SessionOutput.Message ->

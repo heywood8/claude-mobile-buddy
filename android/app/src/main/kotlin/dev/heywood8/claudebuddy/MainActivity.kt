@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
             val dark = isSystemInDarkTheme()
             MaterialTheme(colorScheme = colorScheme(dark)) {
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
+                // Where scanning came from, so a code scanned from the bridge list lands
+                // back on the list rather than dumping you at the dashboard.
+                var afterPairing by remember { mutableStateOf(Screen.DASHBOARD) }
                 var awake by remember { mutableStateOf(Settings.keepScreenOn(this)) }
                 // Applied to the window rather than held as a wake lock: this only keeps the
                 // display alive while our own window is in front, and releases it by itself
@@ -101,8 +104,17 @@ class MainActivity : ComponentActivity() {
                     when (screen) {
                         Screen.PAIRING -> PairingScreen(
                             modifier = modifier,
-                            onPaired = { screen = Screen.DASHBOARD },
-                            onCancel = { screen = Screen.DASHBOARD },
+                            onPaired = { screen = afterPairing },
+                            onCancel = { screen = afterPairing },
+                        )
+
+                        Screen.HOSTS -> HostsScreen(
+                            modifier = modifier,
+                            onPair = {
+                                afterPairing = Screen.HOSTS
+                                withCamera { screen = Screen.PAIRING }
+                            },
+                            onBack = { screen = Screen.DASHBOARD },
                         )
 
                         Screen.HISTORY -> HistoryScreen(
@@ -115,8 +127,12 @@ class MainActivity : ComponentActivity() {
                             modifier = modifier,
                             onStart = ::requestAndStart,
                             onStop = { stopService(Intent(this, BuddyService::class.java)) },
-                            onPair = { withCamera { screen = Screen.PAIRING } },
+                            onPair = {
+                                afterPairing = Screen.DASHBOARD
+                                withCamera { screen = Screen.PAIRING }
+                            },
                             onHistory = { screen = Screen.HISTORY },
+                            onHosts = { screen = Screen.HOSTS },
                             awake = awake,
                             onAwakeChange = {
                                 awake = it
@@ -163,7 +179,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { DASHBOARD, PAIRING, HISTORY }
+private enum class Screen { DASHBOARD, PAIRING, HISTORY, HOSTS }
 
 /**
  * Wallpaper-derived colours where the platform offers them, plain Material otherwise.

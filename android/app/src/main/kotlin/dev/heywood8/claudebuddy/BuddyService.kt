@@ -54,6 +54,12 @@ class BuddyService : Service() {
             peripheral.send(decision)
             journal(decision.id, decision.decision.name.lowercase(), source)
         }
+        BuddyState.onRevoke = { hostId ->
+            peripheral.revoke(hostId)
+            // Advertising with an empty keyring can only ever end in unknown_host, so the
+            // service has nothing left to do once the last bridge is forgotten.
+            if (Keyring.hosts(this).isEmpty()) stopSelf()
+        }
         Journal.prune(this)
         BuddyState.setRunning(true)
         return START_STICKY
@@ -62,6 +68,7 @@ class BuddyService : Service() {
     override fun onDestroy() {
         BuddyState.onForegroundChange = null
         BuddyState.sink = null
+        BuddyState.onRevoke = null
         BuddyState.setRunning(false)
         peripheral?.stop()
         peripheral = null
@@ -122,6 +129,7 @@ class BuddyService : Service() {
 
     private fun onLinkChange(linked: Boolean) {
         BuddyState.setLinked(linked)
+        BuddyState.setLinkedHost(if (linked) peripheral?.linkedHostId else null)
         getSystemService(NotificationManager::class.java)
             .notify(Notifications.ID_LINK, Notifications.link(this, linked))
         if (!linked) {
