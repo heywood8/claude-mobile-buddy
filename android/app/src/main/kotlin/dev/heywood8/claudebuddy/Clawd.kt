@@ -23,6 +23,13 @@ object Clawd {
 
     val EYE = Color(0xFF241A15)
 
+    /** The answer it holds up. Warm rather than pure white, which glares next to the shell. */
+    val PAPER = Color(0xFFF5F0E8)
+
+    /** The laptop it works at: a dark screen and a pale body. */
+    val SCREEN = Color(0xFF2B3440)
+    val CHASSIS = Color(0xFF9AA1A8)
+
     /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
 
@@ -67,11 +74,14 @@ object Clawd {
     fun bobCells(state: PetState): Float = when (state) {
         PetState.SLEEP -> 1f
         PetState.IDLE -> 1f
-        PetState.BUSY -> 1f
+        // Sitting at a desk. The claws on the keys are the movement; a bobbing laptop is not.
+        PetState.BUSY -> 0f
         PetState.ATTENTION -> 2f
         PetState.CELEBRATE -> 3f
         PetState.DIZZY -> 1f
-        PetState.FINISHED -> 2f
+        // Nothing. He is standing still and waving the page; a hop underneath it would put
+        // the whole animal back in motion, which is the thing that read as walking.
+        PetState.FINISHED -> 0f
         PetState.RESTING -> 1f
     }
 
@@ -91,6 +101,9 @@ object Clawd {
         'B' -> BODY
         'L' -> LIMB
         'E' -> EYE
+        'W' -> PAPER
+        'S' -> SCREEN
+        'K' -> CHASSIS
         else -> null
     }
 
@@ -121,7 +134,34 @@ object Clawd {
     private const val STEP_C = ".L...L..L...L."
     private const val STEP_D = "L.....LL.....L"
     private const val TUCKED = "..L........L.."
+
+    /** Both feet down, one row, no cycle: a crab that is not going anywhere. */
+    private const val PLANTED = ".L..L....L..L."
     private const val BLANK = ".............."
+
+    /** The narrower head that fits behind a laptop, and its two eye rows. */
+    private const val DESK_TOP = "...BBBBBBBB..."
+    private const val DESK_WIDE = "..BBBBBBBBBB.."
+    private const val EYES_OPEN_LOW = "..BBEEBBEEBB.."
+    private const val EYES_RIGHT_LOW = "..BBBEEBBEEB.."
+
+    /**
+     * A frame of the crab at its laptop: head above the lid, screen, keyboard.
+     *
+     * The lid covers everything below the eyes, which is what makes it read as sitting at a
+     * desk rather than wearing a monitor.
+     */
+    private fun typing(screen: String, keys: String, face: String) = listOf(
+        BLANK,
+        DESK_TOP,
+        DESK_WIDE,
+        face,
+        DESK_WIDE,
+        screen,
+        ".SSSSSSSSSSSS.",
+        keys,
+        BLANK,
+    )
 
     private fun body(face: String, faceLower: String, legsUpper: String, legsLower: String) =
         listOf(BLANK, TOP, WIDE, face, faceLower, WIDE, BOTTOM, legsUpper, legsLower)
@@ -155,11 +195,16 @@ object Clawd {
             // And a glance at whatever moved.
             body(EYES_RIGHT, EYES_RIGHT, STAND_A, STAND_B),
         ),
+        // Sat at a laptop, typing.
+        //
+        // Only the claws on the keyboard and the text on the screen move. Walking legs under a
+        // working animal read as an animal on its way somewhere, which is the opposite of what
+        // this state means.
         PetState.BUSY to listOf(
-            body(EYES_OPEN, EYES_OPEN, STEP_A, STEP_B),
-            body(EYES_RIGHT, EYES_RIGHT, STEP_C, STEP_D),
-            body(EYES_OPEN, EYES_OPEN, STEP_B, STEP_A),
-            body(EYES_LEFT, EYES_LEFT, STEP_D, STEP_C),
+            typing(screen = ".SWWWSSSSSSSS.", keys = "KKLKKKKKKLKKKK", face = EYES_OPEN_LOW),
+            typing(screen = ".SWWWWSSSSSSS.", keys = "KKKLKKKKKKLKKK", face = EYES_OPEN_LOW),
+            typing(screen = ".SWWWWWSSSSSS.", keys = "KKLKKKKKKKLKKK", face = EYES_RIGHT_LOW),
+            typing(screen = ".SWWSSSSSSSSS.", keys = "KKKLKKKKKLKKKK", face = EYES_OPEN_LOW),
         ),
         PetState.ATTENTION to listOf(
             raised(
@@ -180,23 +225,26 @@ object Clawd {
                 ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_A, STEP_B,
             ),
         ),
-        // Holding the answer up, waiting for someone to take it.
+        // Standing still, holding the answer up and waving it about.
+        //
+        // The legs are one row and identical in every frame on purpose: with the walking pair
+        // underneath, a crab waving a page read as a crab going somewhere. Only the page moves.
         PetState.FINISHED to listOf(
             listOf(
-                "...LLLLLLLL...", TOP, WIDE,
-                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_A, STAND_B,
+                "...WWWWWWWW...", "...WWWWWWWW...", TOP,
+                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
             ),
             listOf(
-                "..LLLLLLLL....", TOP, WIDE,
-                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_B, STAND_A,
+                "..WWWWWWWW....", "..WWWWWWWW....", TOP,
+                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
             ),
             listOf(
-                "....LLLLLLLL..", TOP, WIDE,
-                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_A, STAND_B,
+                "...WWWWWWWW...", "...WWWWWWWW...", TOP,
+                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
             ),
             listOf(
-                "...LLLLLLLL...", TOP, WIDE,
-                EYES_OPEN, EYES_OPEN, WIDE, BOTTOM, STEP_A, STEP_B,
+                "....WWWWWWWW..", "....WWWWWWWW..", TOP,
+                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
             ),
         ),
         // Sat down with it, legs tucked in.
