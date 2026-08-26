@@ -36,7 +36,7 @@ class ClawdTest {
         for (state in PetState.entries) {
             val variants = Clawd.frames[state]
             assertTrue("$state has no frames", variants != null)
-            assertEquals("$state variants", 3, variants!!.size)
+            assertTrue("$state has fewer than three animations", variants!!.size >= 3)
             for ((v, frames) in variants.withIndex()) {
                 assertTrue("$state variant $v is empty", frames.isNotEmpty())
             }

@@ -33,6 +33,16 @@ object Clawd {
     /** Warmer and redder than the shell, so it is a heart and not a lump of crab. */
     val HEART = Color(0xFFE0574A)
 
+    /** Fire, soil and leaf. Three colours the trades needed and the crab did not have. */
+    val FLAME = Color(0xFFF2A03D)
+    val DIRT = Color(0xFF6B4A34)
+    val LEAF = Color(0xFF6E8B4F)
+
+    /** The thing it becomes when a shell command is on the table: hide, horn, and eyeshine. */
+    val SPIRIT = Color(0xFF3E3F73)
+    val BONE = Color(0xFFCFC7B8)
+    val GLOW = Color(0xFFF6D45A)
+
     /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
 
@@ -72,6 +82,7 @@ object Clawd {
         PetState.CELEBRATE -> FRAME_MILLIS
         PetState.DIZZY -> 160
         PetState.HEART -> 260
+        PetState.BREAKER -> 300
     }
 
     /** How far the whole sprite rises, in cells. Whole numbers only — see the renderer. */
@@ -84,6 +95,7 @@ object Clawd {
         PetState.CELEBRATE -> 3f
         PetState.DIZZY -> 1f
         PetState.HEART -> 1f
+        PetState.BREAKER -> 2f
         // Nothing. He is standing still and waving the page; a hop underneath it would put
         // the whole animal back in motion, which is the thing that read as walking.
         PetState.FINISHED -> 0f
@@ -99,6 +111,7 @@ object Clawd {
         PetState.CELEBRATE -> 180
         PetState.DIZZY -> 700
         PetState.HEART -> 900
+        PetState.BREAKER -> 320
         PetState.FINISHED -> 420
         PetState.RESTING -> 3000
     }
@@ -111,6 +124,12 @@ object Clawd {
         'S' -> SCREEN
         'K' -> CHASSIS
         'H' -> HEART
+        'P' -> SPIRIT
+        'N' -> BONE
+        'Y' -> GLOW
+        'F' -> FLAME
+        'D' -> DIRT
+        'G' -> LEAF
         else -> null
     }
 
@@ -202,6 +221,53 @@ object Clawd {
     /** Behind a welding mask. The eyes are gone because that is what a visor is for. */
     private fun welding(glow: String, torch: String) = listOf(
         glow, TOP, WIDE, VISOR, WIDE, BOTTOM, torch, PLANTED, BLANK,
+    )
+
+    /**
+     * The crab at a job: one row above its head, its own five, three of whatever it works at.
+     *
+     * Every trade shares the silhouette so that they read as one animal doing different things
+     * rather than as different animals. What changes is what is over its head and what is under
+     * its claws.
+     */
+    private fun atWork(above: String, face: String, below: List<String>) =
+        listOf(above, TOP, WIDE, face, WIDE, BOTTOM) + below
+
+    // The three rows under the crab, one set per trade. Each is exactly what [atWork] expects.
+    private val POT_STIR_LEFT = listOf("..L.KKKKKKKK..", "...KKKKKKKK...", "..FFFFFFFFFF..")
+    private val POT_STIR_RIGHT = listOf("...KKKKKKKKL..", "...KKKKKKKK...", "..FFFFFFFFFF..")
+
+    private fun canvas(painted: String) = listOf(painted, "..WWWWWWWWWW..", "....KK..KK....")
+    private fun water(float: String) = listOf(float, "SSSSSSSSSSSSSS", "SSSSSSSSSSSSSS")
+    private fun dig(shovel: String) = listOf(shovel, "DDDDDDDDDDDDDD", "DDDDDDDDDDDDDD")
+    private fun board(pads: String) = listOf("..SSSSSSSSSSS.", pads, BLANK)
+    private fun flask(bubbles: String) = listOf(bubbles, "...WWWWWWW....", "....FFFF......")
+    private fun saw(blade: String, dust: String) = listOf("..KKKKKKKKKK..", blade, dust)
+    private fun decks(near: String) = listOf(".SSS....SSS...", near, ".SSS....SSS...")
+    private fun plant(leaves: String) = listOf(leaves, "......GG......", "....KKKKKK....")
+
+    private fun broom(by: Int, dust: String) =
+        listOf(shift("......K.......", by), shift("....KKKKK.....", by), dust)
+
+    private const val HOOVES_A = ".NN......NN..."
+    private const val HOOVES_B = "..NN....NN...."
+
+    /**
+     * Not a crab at all.
+     *
+     * Horns above, a hide where the shell was, eyes that shine rather than sit there. Same
+     * silhouette height as everything else so the row does not jump when it changes.
+     */
+    private fun breaker(horns: String, eyes: String, hooves: String) = listOf(
+        BLANK,
+        horns,
+        "..NPPPPPPPPN..",
+        ".PPPPPPPPPPPP.",
+        eyes,
+        ".PPPPPPPPPPPP.",
+        "..PPPPPPPPPP..",
+        hooves,
+        BLANK,
     )
 
     /** Holding something up over its head — the page, mostly. */
@@ -299,6 +365,76 @@ object Clawd {
                 welding(glow = "...WWW.W.W....", torch = "......KKWW...."),
                 welding(glow = BLANK, torch = "......KK......"),
                 welding(glow = "....W.WW......", torch = "......KKW....."),
+            ),
+            // Cooking: a pot over a fire, a claw stirring, steam coming off it.
+            listOf(
+                atWork("....W.........", EYES_OPEN, POT_STIR_LEFT),
+                atWork("....W..W......", EYES_OPEN, POT_STIR_RIGHT),
+                atWork(".......W......", EYES_SHUT, POT_STIR_LEFT),
+                atWork("..............", EYES_OPEN, POT_STIR_RIGHT),
+            ),
+            // Painting: the canvas fills in over the four frames and starts again.
+            listOf(
+                atWork("......L.......", EYES_OPEN, canvas("..WWWWWWWWWW..")),
+                atWork(".....L........", EYES_OPEN, canvas("..WWHWWWWWWW..")),
+                atWork("......L.......", EYES_RIGHT, canvas("..WWHWHWWWWW..")),
+                atWork(".......L......", EYES_OPEN, canvas("..WWHWHWHWWW..")),
+            ),
+            // Fishing: the rod is still and the float is not.
+            listOf(
+                atWork("L.............", EYES_OPEN, water("....W.........")),
+                atWork("L.............", EYES_OPEN, water("....W.........")),
+                atWork("L.............", EYES_SHUT, water("..............")),
+                atWork("L.............", EYES_OPEN, water("....W.........")),
+            ),
+            // Digging: earth comes up on the frames where the shovel does not.
+            listOf(
+                atWork("..............", EYES_OPEN, dig("....KKKK......")),
+                atWork("...D..D.......", EYES_OPEN, dig("..............")),
+                atWork("..D....D......", EYES_SHUT, dig("....KKKK......")),
+                atWork("..............", EYES_OPEN, dig("..............")),
+            ),
+            // Soldering: a hot tip on a dark board, and smoke off it.
+            listOf(
+                atWork("....W.........", EYES_OPEN, board("..SWSSSHSSSWS.")),
+                atWork("...W..........", EYES_OPEN, board("..SWSSSSHSSWS.")),
+                atWork("....W.........", EYES_SHUT, board("..SWSSSSSHSWS.")),
+                atWork("..............", EYES_OPEN, board("..SWSSSSHSSWS.")),
+            ),
+            // Chemistry: a flask over a burner, bubbling.
+            listOf(
+                atWork("......W.......", EYES_OPEN, flask("...WWHWWW.....")),
+                atWork(".....W.W......", EYES_OPEN, flask("...WHWWHW.....")),
+                atWork("......W.......", EYES_RIGHT, flask("...WWWHWW.....")),
+                atWork("..............", EYES_OPEN, flask("...WHWWWW.....")),
+            ),
+            // Sweeping: the broom goes one way and the dust goes the other.
+            listOf(
+                atWork("..............", EYES_OPEN, broom(-1, "........W..W..")),
+                atWork("..............", EYES_OPEN, broom(0, ".......W...W..")),
+                atWork("..............", EYES_SHUT, broom(1, "......W..W....")),
+                atWork("..............", EYES_OPEN, broom(0, ".....W..W.....")),
+            ),
+            // Sawing: the blade crosses the plank and sawdust falls.
+            listOf(
+                atWork("..............", EYES_OPEN, saw("...KKKK.......", "......W.......")),
+                atWork("..............", EYES_OPEN, saw(".....KKKK.....", "..............")),
+                atWork("..............", EYES_SHUT, saw(".......KKKK...", ".......W......")),
+                atWork("..............", EYES_OPEN, saw(".....KKKK.....", "..............")),
+            ),
+            // Turntables: two records, one claw on the near one.
+            listOf(
+                atWork("...W..........", EYES_OPEN, decks(".SWS....SSS...")),
+                atWork("......W.......", EYES_OPEN, decks(".SSS....SWS...")),
+                atWork("...W.....W....", EYES_HAPPY, decks(".SWS....SSS...")),
+                atWork("..............", EYES_OPEN, decks(".SSS....SWS...")),
+            ),
+            // Watering: the can tips, the drops fall, the leaf answers.
+            listOf(
+                atWork("..KKK.........", EYES_OPEN, plant("......GG......")),
+                atWork("..KKKW........", EYES_OPEN, plant("......GG......")),
+                atWork("..KKK..W......", EYES_OPEN, plant(".....GGGG.....")),
+                atWork("..KKK.........", EYES_HAPPY, plant(".....GGGG.....")),
             ),
         ),
         PetState.ATTENTION to listOf(
@@ -491,6 +627,29 @@ object Clawd {
                 listOf("...HHHHHHH....", "....HHHHH.....") + smitten().drop(2),
                 listOf("....HH.HH.....", ".....HHH......") + smitten().drop(2),
                 topped(smitten(), ".....H.H......"),
+            ),
+        ),
+        // Bash, breaker, horns. Three ways to be about to charge at something.
+        PetState.BREAKER to listOf(
+            listOf(
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+                breaker(".N..........N.", ".PPPPPPPPPPPP.", HOOVES_A),
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B),
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+            ),
+            // Charging, with the dark trailing behind it.
+            listOf(
+                swayed(breaker("NN.........N..", ".PYYPPPPPYYPP.", HOOVES_B), -1),
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+                swayed(breaker("..N.........NN", ".PPYYPPPPPYYP.", HOOVES_B), 1),
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+            ),
+            // Stamping, and the ground answering.
+            listOf(
+                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+                topped(breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B), "..D........D.."),
+                breaker(".N..........N.", ".PPPPPPPPPPPP.", HOOVES_A),
+                topped(breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B), ".D..........D."),
             ),
         ),
     )

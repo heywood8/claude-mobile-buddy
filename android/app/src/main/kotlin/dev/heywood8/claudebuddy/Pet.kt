@@ -37,6 +37,15 @@ enum class PetState {
 
     /** You touched it. It has no other purpose and does not need one. */
     HEART,
+
+    /**
+     * Asking to run a shell command.
+     *
+     * The one state that is a joke rather than a signal: bash, breaker, horns. It carries the
+     * same meaning as [ATTENTION] and appears only when the tool is `Bash`, which happens to
+     * be the tool worth looking twice at anyway.
+     */
+    BREAKER,
 }
 
 /**
@@ -97,7 +106,10 @@ object Pet {
         /** This phone's clock, for the one stamp that was made here. */
         phoneNow: Long,
     ): PetState {
-        if (snapshot.pending.any { it.session == session.id }) return PetState.ATTENTION
+        val asking = snapshot.pending.firstOrNull { it.session == session.id }
+        if (asking != null) {
+            return if (asking.tool == "Bash") PetState.BREAKER else PetState.ATTENTION
+        }
 
         // Your own tap. The request it answered is gone from this snapshot — answering it is
         // what removed it — so the session travels with the answer rather than being looked up.

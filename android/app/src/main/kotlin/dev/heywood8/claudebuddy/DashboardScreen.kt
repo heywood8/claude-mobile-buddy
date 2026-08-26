@@ -315,7 +315,10 @@ private fun Sessions(withButtons: Boolean) {
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ClawdView(PetState.ATTENTION, Modifier.width(84.dp).height(68.dp))
+            ClawdView(
+                if (orphan.tool == "Bash") PetState.BREAKER else PetState.ATTENTION,
+                Modifier.width(84.dp).height(68.dp),
+            )
             Column(Modifier.weight(1f)) { Bubble(orphan, withButtons) }
         }
     }
