@@ -210,6 +210,36 @@ case "status":
     print("Identity  : \(IdentityStore.file.path)")
     print("Listening : \(probe(port: port) ? "yes on \(port)" : "no")")
 
+    // What the phone can show is exactly what Claude Code is configured to send, and a crab
+    // stuck in one mood is a poor way to discover a line missing from a JSON file. Checked by
+    // looking for our own URLs: they are unique strings, and a diagnostic that needs a parser
+    // is one that stops working the day the file grows something unexpected.
+    let endpoints = [
+        ("/permission-request", "the approvals themselves"),
+        ("/session-start", "sessions appearing"),
+        ("/session-end", "sessions leaving"),
+        // Two events share one endpoint, so these are looked for by name. The quote and colon
+        // matter: "PostToolUse" is a prefix of "PostToolUseFailure", and without them a file
+        // carrying only the second would report both as present.
+        ("\"PostToolUse\":", "recent calls, and clearing a card the terminal answered"),
+        ("\"PostToolUseFailure\":", "clearing a card when the command failed"),
+        ("/prompt", "what each session was asked to do"),
+        ("/permission-denied", "denials made by auto mode"),
+        ("/turn-end", "finished, resting, and clearing a card denied by hand"),
+    ]
+    let settingsText = (try? String(
+        contentsOf: settingsPath ?? HookInstaller.defaultPath, encoding: .utf8)) ?? ""
+    let missing = endpoints.filter { !settingsText.contains($0.0) }
+    print("Hooks     : \(endpoints.count - missing.count) of \(endpoints.count) installed")
+    for (path, purpose) in missing {
+        print("  missing \(path) — \(purpose)")
+    }
+    if !missing.isEmpty {
+        print()
+        print("Run `cmbridge install-hook`, then start a new session: the running ones read")
+        print("their config at launch and will not pick this up.")
+    }
+
 case "run", nil:
     // No pairing, no session, no plaintext fallback. Refusing to start beats starting and
     // silently never being able to talk to anything.
