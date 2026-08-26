@@ -92,10 +92,24 @@ actor Coordinator {
 
     func sessionEnded(_ id: String) {
         sessions[id] = nil
+        // Nobody is left to run whatever it was asking about.
+        for pending in queue where pending.sessionID == id {
+            withdraw(pending.id, reason: "its session ended")
+        }
         pushSnapshot()
     }
 
     func recordToolUse(sessionID: String, cwd: String, tool: String, hint: String) {
+        // A tool that has just run was allowed by somebody, and if it is still on the phone
+        // then that somebody was the terminal. Waiting for the hook's own connection to drop
+        // is the correct signal and an unhurried one — Claude Code can hold it open long after
+        // the decision is made, and a card you cannot answer any more is worse than no card.
+        if let stale = queue.first(where: {
+            $0.sessionID == sessionID && $0.prompt.tool == tool && $0.prompt.hint == hint
+        }) {
+            withdraw(stale.id, reason: "answered in the terminal")
+        }
+
         entries.insert(entryLine(tool: tool, hint: hint), at: 0)
         if entries.count > Self.entryLimit { entries.removeLast(entries.count - Self.entryLimit) }
         touch(sessionID, cwd: cwd)
