@@ -212,11 +212,17 @@ has been since you last had a say in it.
 
 `tokens` and `tokens_today` are named as in the reference schema, but nothing in the hook
 payloads carries them: the bridge reads them out of the session's `transcript_path`, counting
-only what has been appended since it last looked. Every field of a usage record is added
-together — input, output, cache creation, cache read — which is what the model processed, not
-what it cost; the four are priced differently and a phone screen is no place to imply
-otherwise. `tokens_today` counts from local midnight on the **host**, by the day the bridge
-read the line rather than the day the line claims.
+only what has been appended since it last looked. Three fields of each usage record are added
+up — `input_tokens`, `output_tokens`, `cache_creation_input_tokens`. `cache_read_input_tokens`
+is left out on purpose: it counts the context re-read on every request, so it grows with the
+square of a conversation and swamps the rest — measured on one working session, four hundred
+million against a few million of everything else. `tokens_today` counts against local midnight
+on the **host**, by the day the bridge first opened each transcript rather than by the
+timestamps inside it.
+
+The totals are absolute per transcript, never accumulated deltas: offsets live in memory, so a
+restarted bridge re-reads each file from the beginning, and a running counter fed by deltas
+counted the same tokens once per restart.
 
 A transcript that cannot be read leaves every one of these at zero. The format belongs to
 Claude Code and carries no stability guarantee, so this is the one part of the snapshot that

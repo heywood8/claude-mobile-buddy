@@ -62,14 +62,13 @@ actor Coordinator {
     private var sessions: [String: Session] = [:]
     private var transcripts = TranscriptReader()
 
-    /// Tokens counted since midnight, across every session.
+    /// The day each transcript was first read, which is what "today" is counted against.
     ///
-    /// "Counted", not "written": the day a token belongs to is the day the bridge read it,
-    /// which differs from the truth only for a session left running across midnight with the
-    /// bridge asleep. Reading the timestamps out of the transcript to do better would mean
-    /// trusting one more field of a format that carries no guarantees.
-    private var tokensToday = 0
-    private var tokensDay = Coordinator.dayKey()
+    /// A transcript, not a session: the totals are per file, and a session that ends and is
+    /// resumed keeps writing to the same one. Sessions come and go from `sessions` — including
+    /// on SessionEnd, taking their tokens with them — so the day has to be remembered against
+    /// something that stays.
+    private var transcriptDay: [String: Int] = [:]
 
     init(
         link: any LinkSink,
@@ -132,20 +131,29 @@ actor Coordinator {
     /// Called from the hook path rather than on a timer: the file only moves when the session
     /// does, and every hook that reaches us names the transcript it came from.
     func noteTranscript(sessionID: String, path: String) {
-        let delta = transcripts.delta(path: path)
-        guard delta > 0 else { return }
+        guard !path.isEmpty else { return }
+        let total = transcripts.total(path: path)
+        guard total > 0 else { return }
 
-        let today = Self.dayKey()
-        if today != tokensDay {
-            tokensDay = today
-            tokensToday = 0
-        }
-        tokensToday += delta
-
+        if transcriptDay[path] == nil { transcriptDay[path] = Self.dayKey() }
         if var session = sessions[sessionID] {
-            session.tokens += delta
+            session.tokens = total
             sessions[sessionID] = session
         }
+    }
+
+    /// Everything read today, by the day the bridge first opened each transcript.
+    ///
+    /// Not by the timestamps inside it: that would mean trusting one more field of a format
+    /// with no guarantees, to sharpen a number that is decoration. A session running since
+    /// yesterday counts as today's on the first day the bridge sees it, and no day counts
+    /// anything twice.
+    private func tokensToday() -> Int {
+        let today = Self.dayKey()
+        return transcriptDay
+            .filter { $0.value == today }
+            .keys
+            .reduce(0) { $0 + transcripts.tokens(for: $1) }
     }
 
     // MARK: - Approvals
@@ -304,7 +312,7 @@ actor Coordinator {
                 // Stable order, so the list on the phone does not reshuffle every keepalive.
                 .sorted { $0.started < $1.started },
             tokens: sessions.values.reduce(0) { $0 + $1.tokens },
-            tokensToday: tokensToday)
+            tokensToday: tokensToday())
         guard let data = try? LineCodec.encode(snapshot) else { return }
         link.send(data)
     }
