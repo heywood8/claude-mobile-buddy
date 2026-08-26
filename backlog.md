@@ -8,8 +8,12 @@ The upstream reference implementation (`anthropics/claude-desktop-buddy`) is a v
 feeds on approvals. v1 deliberately ships the control surface only; the pet is what makes it
 pleasant, not what makes it work.
 
-- Seven animation states: `sleep`, `idle`, `busy`, `attention`, `celebrate`, `dizzy`, `heart`.
-- Species picker. Upstream ships 18 ASCII species plus GIF character packs.
+- `heart`, the one upstream state not built. The other seven are, plus `finished` and
+  `resting`, which upstream has no equivalent of because an ESP32 never knew whether you had
+  read the answer either.
+- Species picker. Upstream ships 18 ASCII species plus GIF character packs. Worth having when
+  there is a second species worth picking; the frame tables are already data, so adding one is
+  a text edit.
 - GIF rendering from local device storage. We will **not** implement the `char_begin` /
   `file` / `chunk` / `file_end` / `char_end` folder-push transfer: streaming GIFs over BLE
   exists because an ESP32 has no filesystem the user can reach. A phone does.
@@ -37,8 +41,10 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 ## Protocol extensions
 
 - `prompts[]` array replacing the single `prompt` field, so several pending approvals can be
-  rendered at once. v1 serialises them through a FIFO queue with a `+N waiting` counter instead;
-  a phone screen is a poor place for a queue of five.
+  rendered at once. This was refused on the grounds that a phone screen is a poor place for a
+  queue of five — which was true while the screen had one card on it. It no longer is: each
+  session now has a row of its own, and a request is drawn as that session's crab asking. Two
+  sessions asking at once is two crabs asking, which is the layout the app already has.
 - Multiple hosts connected simultaneously. The keyring already stores several hosts and the
   handshake already carries a host id, but only one host is served at a time — a second one is
   refused with a reason. Serving both breaks the single FIFO queue and makes it ambiguous whose
@@ -46,10 +52,10 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 ## Distribution
 
-- Developer ID signing and notarisation of the bridge `.app` bundle, so it can be downloaded
-  from Releases and opened without clearing the quarantine attribute. Requires an Apple
-  Developer Program membership. v1 builds from source locally, which Gatekeeper does not
-  quarantine.
+- Developer ID signing and notarisation of the bridge `.app`: **dropped**. It buys a download
+  that opens without clearing the quarantine attribute, and nothing else — built from source
+  it is not quarantined at all. Worth revisiting only if someone other than the author wants
+  the bundle.
 - Publishing the Android app anywhere other than GitHub Releases. A foreground service holding
   a BLE advertiser is a review conversation that a personal developer tool does not need to have.
 
@@ -71,11 +77,11 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 `make app` now produces the `.app` bundle, and `cmbridge print-agent` prints the LaunchAgent
 that runs it at login. What remains is the signature.
 
-The bundle is signed ad-hoc, because a TCC grant has to attach to *some* signature. An ad-hoc
-identity is the code hash, so every rebuild invalidates the Bluetooth permission and macOS asks
-again. Irrelevant once installed, tiresome while iterating. A Developer ID would make the
-identity stable across rebuilds — the same membership the notarisation entry below wants, so
-the two are one decision rather than two.
+The bundle is signed ad-hoc, because a TCC grant has to attach to *some* signature. The theory
+says an ad-hoc identity is the code hash, so every rebuild should invalidate the Bluetooth
+permission — measured over a dozen rebuilds, a rename and a move to `~/Applications`, it never
+did once. Whatever macOS is keying on here, it is not the hash. Left as written down rather
+than believed.
 
 `make install` copies the bundle to `~/Applications`, because launchd stores the path it is
 handed and never looks again: an agent pointed into the build directory dies at the first
