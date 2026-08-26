@@ -2,6 +2,15 @@ import Foundation
 
 let log = Logger()
 
+/// Signal sources, held for the life of the process on purpose.
+///
+/// A `DispatchSourceSignal` stops firing when it is released, and the recipe for using one
+/// sets the signal's default disposition to ignore first — so a source that goes out of scope
+/// does not restore the old behaviour, it removes it. The bridge would then ignore SIGTERM
+/// outright and only die to SIGKILL, with every waiting hook hung up on. Measured, not
+/// theorised: the first version of this held them in a local.
+var shutdownSources: [DispatchSourceSignal] = []
+
 var arguments = Array(CommandLine.arguments.dropFirst())
 
 func takeFlag(_ name: String) -> Bool {
@@ -224,6 +233,31 @@ case "run", nil:
         }
     }
 
+    // launchd stops an agent with SIGTERM, and every reinstall does exactly that. Dying with
+    // requests in flight leaves the hooks holding them to discover a closed socket, which is
+    // not an answer — so the queue is released first and each caller gets the ordinary "no
+    // decision" it would have got from an expiring window.
+    shutdownSources = [SIGTERM, SIGINT].map { number -> DispatchSourceSignal in
+        // The dispatch source only ever fires with the default disposition out of the way.
+        signal(number, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
+        source.setEventHandler {
+            log.info("shutting down")
+            Task {
+                await coordinator.drain(reason: "bridge shutting down")
+                if let bye = try? LineCodec.payload(Bye(reason: "shutdown")) {
+                    link.send(bye)
+                }
+                // Long enough for those responses to be written and the bye to reach the
+                // radio, short enough that launchd does not run out of patience and follow
+                // with SIGKILL.
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                exit(0)
+            }
+        }
+        source.resume()
+        return source
+    }
     do {
         try HookServer(coordinator: coordinator, log: log).run(port: port)
     } catch {

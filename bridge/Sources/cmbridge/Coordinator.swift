@@ -162,10 +162,9 @@ actor Coordinator {
             log.decision("\(id) denied from phone")
             return .deny("Denied from phone")
         case nil:
-            // Withdrawal already said why, and there is nobody left to answer in any case.
-            if !Task.isCancelled {
-                log.decision("\(id) expired unanswered, deferring to terminal")
-            }
+            // Whoever released it has already said why — expired, withdrawn, phone gone,
+            // bridge shutting down. Saying "expired" here as well would put the wrong reason
+            // in the log for three of the four.
             return .noDecision
         }
     }
@@ -207,6 +206,21 @@ actor Coordinator {
 
     // MARK: - Internals
 
+    /// Releases everything still waiting, for a bridge that is about to stop existing.
+    ///
+    /// Exiting with requests in flight hangs up on the hooks holding them open, and a broken
+    /// connection is not an answer — the session on the other end has to decide what a dead
+    /// socket meant. Released, it is the same "no decision" an expiring window produces, and
+    /// the terminal asks for itself.
+    func drain(reason: String) {
+        let stranded = queue
+        queue.removeAll()
+        for pending in stranded {
+            log.decision("\(pending.id) released — \(reason)")
+            pending.continuation.resume(returning: nil)
+        }
+    }
+
     /// Drops a request nobody is waiting for any more.
     func withdraw(_ id: String, reason: String) {
         guard let index = queue.firstIndex(where: { $0.id == id }) else {
@@ -222,6 +236,7 @@ actor Coordinator {
     private func expire(_ id: String) {
         guard let index = queue.firstIndex(where: { $0.id == id }) else { return }
         let pending = queue.remove(at: index)
+        log.decision("\(id) expired unanswered, deferring to terminal")
         pending.continuation.resume(returning: nil)
         pushSnapshot()
     }
