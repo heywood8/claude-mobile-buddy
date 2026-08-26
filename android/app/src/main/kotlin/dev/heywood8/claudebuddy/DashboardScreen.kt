@@ -21,7 +21,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 /**
  * What is waiting, and the controls for it.
@@ -60,6 +63,7 @@ fun DashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     PendingDecision()
+                    PetView()
                     Status()
                     Sessions()
                     RecentCalls()
@@ -77,6 +81,7 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 PendingDecision()
+                PetView()
                 Status()
                 Sessions()
                 Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
@@ -106,6 +111,43 @@ private fun PendingDecision() {
             }
         }
     }
+}
+
+/**
+ * The pet, which does nothing and is the first thing you look at.
+ *
+ * Its state is derived, never stored: what the bridge already said, plus your own last tap.
+ * The only thing kept here is which of the two frames is showing.
+ */
+@Composable
+private fun PetView() {
+    // A slow tick, only so the mood is recomputed against a current clock: without it the pet
+    // would sit in whatever state the last snapshot left it in. The animation itself runs on
+    // its own clock inside ClawdView.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            tick++
+        }
+    }
+
+    val snapshot = BuddyState.snapshot
+    val state = Pet.state(
+        running = BuddyState.running,
+        linked = BuddyState.linked,
+        snapshot = snapshot,
+        lastAnswer = BuddyState.lastAnswer,
+        phoneNow = System.currentTimeMillis() / 1000,
+    )
+
+    ClawdView(state)
+
+    val level = Pet.level(snapshot?.tokens ?: 0)
+    Text(
+        text = if (level > 0) "${Pet.caption(state)} · lvl $level" else Pet.caption(state),
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable

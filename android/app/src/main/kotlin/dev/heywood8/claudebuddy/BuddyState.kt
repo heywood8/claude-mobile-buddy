@@ -26,6 +26,9 @@ object BuddyState {
     var linkedHost by mutableStateOf<String?>(null)
         private set
 
+    var lastAnswer by mutableStateOf<Answer?>(null)
+        private set
+
     var running by mutableStateOf(false)
         private set
 
@@ -68,7 +71,12 @@ object BuddyState {
 
     fun answer(id: String, verdict: Verdict, source: String) {
         sink?.invoke(Decision(id = id, decision = verdict), source)
+        val at = System.currentTimeMillis() / 1000
+        main.post { lastAnswer = Answer(id, verdict, at) }
     }
+
+    /** Your last decision, so the pet can react to it. Timed by this phone's clock. */
+    data class Answer(val id: String, val verdict: Verdict, val at: Long)
 
     /**
      * Drops the live link if it belongs to [hostId]. Removing the keyring entry is the
