@@ -65,10 +65,6 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 ## Android
 
-- Full-screen intent for approval prompts, i.e. the screen lighting up like an incoming call.
-  Android 14 restricted `USE_FULL_SCREEN_INTENT` to calling and alarm apps; everyone else needs
-  an explicit user grant through a separate settings screen. Worth the onboarding step only if
-  heads-up notifications turn out to be missable in practice.
 - Wear OS companion.
 - iOS. CoreBluetooth can act as a peripheral, but a backgrounded iOS app drops the local name
   from its advertisement and moves service UUIDs into the overflow area, where a desktop scanner
@@ -79,7 +75,6 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 - SPAKE2 or an equivalent PAKE, so a six-digit code yields a full-entropy key the way Bluetooth
   LE Secure Connections does. v1 transfers a 256-bit key by scanning a QR code rendered as ASCII
   in the terminal, which needs no PAKE and no typing, at the cost of requiring a camera.
-- Key rotation and per-host revocation from the phone.
 
 ## Bridge packaging
 
@@ -92,9 +87,9 @@ again. Irrelevant once installed, tiresome while iterating. A Developer ID would
 identity stable across rebuilds — the same membership the notarisation entry below wants, so
 the two are one decision rather than two.
 
-The bundle also lives wherever it was built. The LaunchAgent hard-codes that path, so moving
-the checkout breaks it silently. Installing to `~/Applications` would fix that; it has not been
-done because it is one more thing that writes outside the repository.
+`make install` copies the bundle to `~/Applications`, because launchd stores the path it is
+handed and never looks again: an agent pointed into the build directory dies at the first
+`make clean` and dies quietly.
 
 ## Swift 6 language mode
 

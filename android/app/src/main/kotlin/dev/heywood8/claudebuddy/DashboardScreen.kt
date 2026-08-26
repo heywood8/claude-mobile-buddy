@@ -1,5 +1,8 @@
 package dev.heywood8.claudebuddy
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -244,6 +247,48 @@ private fun Controls(
             if (notify) "Notify when a decision is waiting" else "Silent — check the app",
             style = MaterialTheme.typography.bodyMedium,
         )
+    }
+
+    // Read on every recomposition rather than remembered: the grant is given on a settings
+    // screen outside this app, and coming back to a switch still insisting it is off would
+    // read as the toggle being broken.
+    val canFullScreen = Notifications.canUseFullScreen(context)
+    var fullScreen by remember { mutableStateOf(Settings.fullScreen(context)) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Switch(
+            checked = fullScreen && canFullScreen,
+            onCheckedChange = {
+                fullScreen = it
+                Settings.setFullScreen(context, it)
+                if (it && !canFullScreen) {
+                    // Android 14 hands this one out on a screen of its own. There is no
+                    // runtime prompt to raise, so the best that can be done is to open it.
+                    context.startActivity(
+                        Intent(
+                            AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                            Uri.fromParts("package", context.packageName, null),
+                        )
+                    )
+                }
+            },
+        )
+        Column {
+            Text("Light up the screen", style = MaterialTheme.typography.bodyMedium)
+            if (fullScreen && !canFullScreen) {
+                Text(
+                    "Android is holding this one back — grant it in settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (fullScreen) {
+                Text(
+                    "A request wakes the display. What it wants to run stays behind the lock.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
 
     Row(

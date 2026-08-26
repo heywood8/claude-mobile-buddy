@@ -126,7 +126,12 @@ class BuddyService : Service() {
         }
         manager.notify(
             Notifications.ID_APPROVAL,
-            Notifications.approval(this, prompt, waiting = snapshot.waiting),
+            Notifications.approval(
+                this,
+                prompt,
+                waiting = snapshot.waiting,
+                fullScreen = Settings.fullScreen(this) && Notifications.canUseFullScreen(this),
+            ),
         )
     }
 

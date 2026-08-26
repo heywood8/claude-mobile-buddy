@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 
 object Notifications {
     const val CHANNEL_LINK = "link"
@@ -42,7 +43,22 @@ object Notifications {
             .setContentIntent(openApp(context))
             .build()
 
-    fun approval(context: Context, prompt: Prompt, waiting: Int = 1): Notification {
+    /**
+     * Whether a full-screen intent would do anything.
+     *
+     * Android 14 reserved the grant for calling and alarm apps and made everyone else ask for
+     * it on a settings screen of its own. Below that it is an ordinary manifest permission.
+     */
+    fun canUseFullScreen(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+            context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+
+    fun approval(
+        context: Context,
+        prompt: Prompt,
+        waiting: Int = 1,
+        fullScreen: Boolean = false,
+    ): Notification {
         // The command text stays off the lock screen. That a decision is waiting is not
         // sensitive; what it wants to run is.
         return Notification.Builder(context, CHANNEL_APPROVAL)
@@ -57,6 +73,11 @@ object Notifications {
             .setCategory(Notification.CATEGORY_CALL)
             .setOnlyAlertOnce(true)
             .setContentIntent(openApp(context))
+            // Wakes the display and puts the app in front. Deliberately without
+            // showWhenLocked on the activity: the screen lights up, the keyguard stays, and
+            // what the command actually is remains behind it — the same line the private
+            // visibility above draws. Lighting up is a summons, not a disclosure.
+            .apply { if (fullScreen) setFullScreenIntent(openApp(context), true) }
             .addAction(action(context, prompt.id, Verdict.ONCE, "Allow"))
             .addAction(action(context, prompt.id, Verdict.DENY, "Deny"))
             .build()

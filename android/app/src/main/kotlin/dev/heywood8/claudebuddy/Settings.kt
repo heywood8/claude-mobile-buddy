@@ -8,6 +8,7 @@ object Settings {
     private const val NOTIFICATIONS = "notifications"
     private const val KEEP_SCREEN_ON = "keepScreenOn"
     private const val SHOULD_RUN = "shouldRun"
+    private const val FULL_SCREEN = "fullScreen"
 
     /**
      * Whether a pending approval raises a notification.
@@ -55,6 +56,19 @@ object Settings {
 
     fun setShouldRun(context: Context, value: Boolean) {
         prefs(context).edit().putBoolean(SHOULD_RUN, value).apply()
+    }
+
+    /**
+     * Whether a waiting decision takes over the screen instead of arriving as a heads-up.
+     *
+     * Off by default. It is the right setting for a phone propped on a desk and the wrong one
+     * for a phone in a pocket, and only you know which this is.
+     */
+    fun fullScreen(context: Context): Boolean =
+        prefs(context).getBoolean(FULL_SCREEN, false)
+
+    fun setFullScreen(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean(FULL_SCREEN, value).apply()
     }
 
     private fun prefs(context: Context) =
