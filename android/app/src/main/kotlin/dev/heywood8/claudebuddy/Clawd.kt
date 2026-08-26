@@ -173,6 +173,50 @@ object Clawd {
     private fun body(face: String, faceLower: String, legsUpper: String, legsLower: String) =
         listOf(BLANK, TOP, WIDE, face, faceLower, WIDE, BOTTOM, legsUpper, legsLower)
 
+    /**
+     * The same row moved sideways, padding with empty cells and keeping the width.
+     *
+     * A whole frame shifted by a cell is a lean, and two of them either side of the original
+     * are a sway — which is most of what makes a second version of an animation feel like a
+     * different animation rather than the same one played again.
+     */
+    private fun shift(row: String, by: Int): String = when {
+        by > 0 -> (".".repeat(by) + row).take(row.length)
+        by < 0 -> row.drop(-by) + ".".repeat(-by)
+        else -> row
+    }
+
+    private fun swayed(frame: List<String>, by: Int) = frame.map { shift(it, by) }
+
+    /** A frame with something drawn above the head, for the states that have something to say. */
+    private fun topped(frame: List<String>, top: String) = listOf(top) + frame.drop(1)
+
+    private const val ANVIL = "..KKKKKKKKKK.."
+    private const val VISOR = ".BEEEEEEEEEEB."
+
+    /** At the anvil: five rows of crab standing behind three rows of iron. */
+    private fun forge(hammer: String, anvilTop: String, face: String) = listOf(
+        hammer, TOP, WIDE, face, WIDE, BOTTOM, anvilTop, "....KKKKKK....", "..KKKKKKKKKK..",
+    )
+
+    /** Behind a welding mask. The eyes are gone because that is what a visor is for. */
+    private fun welding(glow: String, torch: String) = listOf(
+        glow, TOP, WIDE, VISOR, WIDE, BOTTOM, torch, PLANTED, BLANK,
+    )
+
+    /** Holding something up over its head — the page, mostly. */
+    private fun holding(sheet: String, face: String, faceLower: String) = listOf(
+        sheet, sheet, TOP, WIDE, face, faceLower, WIDE, BOTTOM, PLANTED,
+    )
+
+    /** Sat down with its legs tucked in. */
+    private fun sitting(face: String, faceLower: String) =
+        listOf(BLANK, TOP, WIDE, face, faceLower, WIDE, BOTTOM, TUCKED, BLANK)
+
+    /** The body used by every heart frame; the hearts themselves go above it. */
+    private fun smitten() =
+        listOf(BLANK, TOP, WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED, BLANK)
+
     /** Claws raised above the shell, for the states that are asking for something. */
     private fun raised(
         claws: String,
@@ -188,109 +232,266 @@ object Clawd {
      *
      * Adding a frame is a text edit; adding a state is a line here and a line in [PetState].
      */
-    val frames: Map<PetState, List<List<String>>> = mapOf(
+    val frames: Map<PetState, List<List<List<String>>>> = mapOf(
         PetState.SLEEP to listOf(
-            listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
-            listOf(BLANK, BLANK, TOP, WIDE, EYES_SHUT, WIDE, BOTTOM, TUCKED, BLANK),
-            listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(
+                listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
+                listOf(BLANK, BLANK, TOP, WIDE, EYES_SHUT, WIDE, BOTTOM, TUCKED, BLANK),
+                listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
+            ),
+            // Dreaming out loud.
+            listOf(
+                topped(body(EYES_SHUT, WIDE, TUCKED, BLANK), "...........L.."),
+                topped(body(EYES_SHUT, WIDE, TUCKED, BLANK), "..........L..."),
+                topped(body(EYES_SHUT, WIDE, TUCKED, BLANK), ".........LL..."),
+                topped(body(EYES_SHUT, WIDE, TUCKED, BLANK), BLANK),
+            ),
+            // Rolled over and settling.
+            listOf(
+                swayed(body(EYES_SHUT, WIDE, TUCKED, BLANK), -1),
+                swayed(body(EYES_SHUT, WIDE, TUCKED, BLANK), -1),
+                swayed(body(EYES_SHUT, WIDE, TUCKED, BLANK), 0),
+                swayed(body(EYES_SHUT, WIDE, TUCKED, BLANK), 0),
+            ),
         ),
         PetState.IDLE to listOf(
-            body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B),
-            body(EYES_OPEN, EYES_OPEN, STAND_B, STAND_A),
-            // The blink. One frame of it, which is all a blink is.
-            body(EYES_SHUT, EYES_OPEN, STAND_A, STAND_B),
-            // And a glance at whatever moved.
-            body(EYES_RIGHT, EYES_RIGHT, STAND_A, STAND_B),
+            listOf(
+                body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B),
+                body(EYES_OPEN, EYES_OPEN, STAND_B, STAND_A),
+                // The blink. One frame of it, which is all a blink is.
+                body(EYES_SHUT, EYES_OPEN, STAND_A, STAND_B),
+                body(EYES_RIGHT, EYES_RIGHT, STAND_A, STAND_B),
+            ),
+            // Looking around.
+            listOf(
+                body(EYES_LEFT, EYES_LEFT, STAND_A, STAND_B),
+                body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B),
+                body(EYES_RIGHT, EYES_RIGHT, STAND_B, STAND_A),
+                body(EYES_SHUT, EYES_OPEN, STAND_A, STAND_B),
+            ),
+            // Shifting its weight from side to side.
+            listOf(
+                swayed(body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B), -1),
+                body(EYES_OPEN, EYES_OPEN, STAND_B, STAND_A),
+                swayed(body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B), 1),
+                body(EYES_SHUT, EYES_OPEN, STAND_B, STAND_A),
+            ),
         ),
-        // Sat at a laptop, typing.
-        //
-        // Only the claws on the keyboard and the text on the screen move. Walking legs under a
-        // working animal read as an animal on its way somewhere, which is the opposite of what
-        // this state means.
+        // Three ways of being at work. Same meaning, different trade.
         PetState.BUSY to listOf(
-            typing(screen = ".KSWWWSSSSSSK.", keys = "KKLKKKKKKLKKKK", face = EYES_OPEN_LOW),
-            typing(screen = ".KSWWWWSSSSSK.", keys = "KKKLKKKKKKLKKK", face = EYES_OPEN_LOW),
-            typing(screen = ".KSWWWWWSSSSK.", keys = "KKLKKKKKKKLKKK", face = EYES_RIGHT_LOW),
-            typing(screen = ".KSWWSSSSSSSK.", keys = "KKKLKKKKKLKKKK", face = EYES_OPEN_LOW),
+            listOf(
+                typing(screen = ".KSWWWSSSSSSK.", keys = "KKLKKKKKKLKKKK", face = EYES_OPEN_LOW),
+                typing(screen = ".KSWWWWSSSSSK.", keys = "KKKLKKKKKKLKKK", face = EYES_OPEN_LOW),
+                typing(screen = ".KSWWWWWSSSSK.", keys = "KKLKKKKKKKLKKK", face = EYES_RIGHT_LOW),
+                typing(screen = ".KSWWSSSSSSSK.", keys = "KKKLKKKKKLKKKK", face = EYES_OPEN_LOW),
+            ),
+            // At the anvil. The hammer comes down on the third frame, which is where the
+            // sparks are — a strike you can see is worth more than a hammer you can follow.
+            listOf(
+                forge(hammer = "....KKKK......", anvilTop = ANVIL, face = EYES_OPEN),
+                forge(hammer = "...KKK........", anvilTop = ANVIL, face = EYES_OPEN),
+                forge(hammer = BLANK, anvilTop = "..KKHKKKKHKK..", face = EYES_SHUT),
+                forge(hammer = "..KK..........", anvilTop = "...KHKKKKKHK..", face = EYES_OPEN),
+            ),
+            // Welding: the arc is the animation, and the visor is why the eyes are gone.
+            listOf(
+                welding(glow = "....W..W......", torch = "......KKW....."),
+                welding(glow = "...WWW.W.W....", torch = "......KKWW...."),
+                welding(glow = BLANK, torch = "......KK......"),
+                welding(glow = "....W.WW......", torch = "......KKW....."),
+            ),
         ),
         PetState.ATTENTION to listOf(
-            raised(
-                "L............L", "LL.BBBBBBBB.LL",
-                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STAND_A, STAND_B,
+            listOf(
+                raised(
+                    "L............L", "LL.BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STAND_A, STAND_B,
+                ),
+                raised(
+                    "LL..........LL", "L..BBBBBBBB..L",
+                    ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_C, STEP_D,
+                ),
+                raised(
+                    "L............L", "LL.BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
+                ),
+                raised(
+                    "LL..........LL", "LL.BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_A, STEP_B,
+                ),
             ),
-            raised(
-                "LL..........LL", "L..BBBBBBBB..L",
-                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_C, STEP_D,
+            // One claw at a time, like somebody flagging down a taxi.
+            listOf(
+                raised(
+                    "L.............", "LL.BBBBBBBB...",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_A, STAND_B,
+                ),
+                raised(
+                    ".L............", ".L.BBBBBBBB...",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
+                ),
+                raised(
+                    ".............L", "...BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_A, STAND_B,
+                ),
+                raised(
+                    "............L.", "...BBBBBBBB.L.",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
+                ),
             ),
-            raised(
-                "L............L", "LL.BBBBBBBB.LL",
-                ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
-            ),
-            // One insistent shake of both claws at once.
-            raised(
-                "LL..........LL", "LL.BBBBBBBB.LL",
-                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_A, STEP_B,
+            // Hopping on the spot with both claws up.
+            listOf(
+                swayed(
+                    raised(
+                        "L............L", "LL.BBBBBBBB.LL",
+                        ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_A, STEP_B,
+                    ),
+                    -1,
+                ),
+                raised(
+                    "L............L", "LL.BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STAND_A, STAND_B,
+                ),
+                swayed(
+                    raised(
+                        "L............L", "LL.BBBBBBBB.LL",
+                        ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_C, STEP_D,
+                    ),
+                    1,
+                ),
+                raised(
+                    "L............L", "LL.BBBBBBBB.LL",
+                    ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
+                ),
             ),
         ),
-        // Standing still, holding the answer up and waving it about.
-        //
-        // The legs are one row and identical in every frame on purpose: with the walking pair
-        // underneath, a crab waving a page read as a crab going somewhere. Only the page moves.
         PetState.FINISHED to listOf(
             listOf(
-                "...WWWWWWWW...", "...WWWWWWWW...", TOP,
-                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
+                holding("...WWWWWWWW...", EYES_UP_TOP, EYES_UP_LOW),
+                holding("..WWWWWWWW....", EYES_UP_TOP, EYES_UP_LOW),
+                holding("...WWWWWWWW...", EYES_UP_TOP, EYES_UP_LOW),
+                holding("....WWWWWWWW..", EYES_UP_TOP, EYES_UP_LOW),
             ),
+            // Peering over the top of it to see whether anyone is coming.
             listOf(
-                "..WWWWWWWW....", "..WWWWWWWW....", TOP,
-                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
+                holding("...WWWWWWWW...", EYES_OPEN, EYES_OPEN),
+                holding("...WWWWWWWW...", EYES_UP_TOP, EYES_UP_LOW),
+                holding("...WWWWWWWW...", EYES_RIGHT, EYES_RIGHT),
+                holding("...WWWWWWWW...", EYES_OPEN, EYES_OPEN),
             ),
+            // Offering it: held out, then up, then out again.
             listOf(
-                "...WWWWWWWW...", "...WWWWWWWW...", TOP,
-                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
-            ),
-            listOf(
-                "....WWWWWWWW..", "....WWWWWWWW..", TOP,
-                WIDE, EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, PLANTED,
+                holding("..WWWWWWWWWW..", EYES_OPEN, EYES_OPEN),
+                holding("...WWWWWWWW...", EYES_UP_TOP, EYES_UP_LOW),
+                holding("....WWWWWW....", EYES_UP_TOP, EYES_UP_LOW),
+                holding("...WWWWWWWW...", EYES_OPEN, EYES_OPEN),
             ),
         ),
-        // Sat down with it, legs tucked in.
         PetState.RESTING to listOf(
-            listOf(BLANK, TOP, WIDE, EYES_HALF_TOP, EYES_HALF_LOW, WIDE, BOTTOM, TUCKED, BLANK),
-            listOf(BLANK, TOP, WIDE, EYES_OPEN, EYES_OPEN, WIDE, BOTTOM, TUCKED, BLANK),
-            listOf(BLANK, TOP, WIDE, EYES_SHUT, EYES_SHUT, WIDE, BOTTOM, TUCKED, BLANK),
-            listOf(BLANK, TOP, WIDE, EYES_LEFT, EYES_LEFT, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(
+                sitting(EYES_HALF_TOP, EYES_HALF_LOW),
+                sitting(EYES_OPEN, EYES_OPEN),
+                sitting(EYES_SHUT, EYES_SHUT),
+                sitting(EYES_LEFT, EYES_LEFT),
+            ),
+            // Nodding off and catching itself.
+            listOf(
+                sitting(EYES_SHUT, EYES_SHUT),
+                swayed(sitting(EYES_SHUT, EYES_SHUT), 1),
+                sitting(EYES_OPEN, EYES_OPEN),
+                sitting(EYES_HALF_TOP, EYES_HALF_LOW),
+            ),
+            // Rocking gently, eyes on nothing in particular.
+            listOf(
+                swayed(sitting(EYES_HALF_TOP, EYES_HALF_LOW), -1),
+                sitting(EYES_LEFT, EYES_LEFT),
+                swayed(sitting(EYES_HALF_TOP, EYES_HALF_LOW), 1),
+                sitting(EYES_RIGHT, EYES_RIGHT),
+            ),
         ),
         PetState.CELEBRATE to listOf(
-            raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_A, STAND_B),
-            raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
-            raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_B, STAND_A),
-            raised("..L........L..", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
-        ),
-        // A heart, rising. Four frames of it and then whatever it was doing before.
-        PetState.HEART to listOf(
             listOf(
-                BLANK, "..H.H.........", TOP,
-                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+                raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_A, STAND_B),
+                raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
+                raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_B, STAND_A),
+                raised("..L........L..", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
             ),
+            // A lap of honour, side to side.
             listOf(
-                "..H.H.........", "..HHH.........", TOP,
-                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+                swayed(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
+                    -1,
+                ),
+                raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STAND_A, STAND_B),
+                swayed(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
+                    1,
+                ),
+                raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STAND_B, STAND_A),
             ),
+            // Throwing confetti, one claw then the other.
             listOf(
-                "...H..........", "..H.H.........", TOP,
-                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
-            ),
-            listOf(
-                BLANK, "...H..........", TOP,
-                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+                topped(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STAND_A, STAND_B),
+                    "H...........H.",
+                ),
+                topped(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
+                    ".H.........H..",
+                ),
+                topped(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STAND_B, STAND_A),
+                    "..H.......H...",
+                ),
+                topped(
+                    raised("L............L", "LL.BBBBBBBB.LL", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
+                    BLANK,
+                ),
             ),
         ),
         PetState.DIZZY to listOf(
-            body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_C, STEP_D),
-            body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_A, STEP_B),
-            body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_D, STEP_C),
-            body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_B, STEP_A),
+            listOf(
+                body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_C, STEP_D),
+                body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_A, STEP_B),
+                body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_D, STEP_C),
+                body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_B, STEP_A),
+            ),
+            // Staggering.
+            listOf(
+                swayed(body(".BEBEBBBBEBEB.", EYES_SHUT, STEP_A, STEP_B), -1),
+                body(".BBEBBBBBBEBB.", EYES_SHUT, STEP_C, STEP_D),
+                swayed(body(".BEBEBBBBEBEB.", EYES_SHUT, STEP_B, STEP_A), 1),
+                body(".BBEBBBBBBEBB.", EYES_SHUT, STEP_D, STEP_C),
+            ),
+            // Seeing stars.
+            listOf(
+                topped(body(EYES_SHUT, ".BEBEBBBBEBEB.", STEP_A, STEP_B), "...W....W....."),
+                topped(body(EYES_SHUT, ".BBEBBBBBBEBB.", STEP_C, STEP_D), "..W......W...."),
+                topped(body(EYES_SHUT, ".BEBEBBBBEBEB.", STEP_B, STEP_A), "...W....W....."),
+                topped(body(EYES_SHUT, ".BBEBBBBBBEBB.", STEP_D, STEP_C), BLANK),
+            ),
+        ),
+        PetState.HEART to listOf(
+            listOf(
+                topped(smitten(), "..H.H........."),
+                listOf("..H.H.........", "..HHH.........") + smitten().drop(2),
+                listOf("...H..........", "..H.H.........") + smitten().drop(2),
+                topped(smitten(), "...H.........."),
+            ),
+            // Two of them, drifting apart.
+            listOf(
+                topped(smitten(), "..H.......H..."),
+                topped(smitten(), ".H.........H.."),
+                topped(smitten(), "H...........H."),
+                topped(smitten(), BLANK),
+            ),
+            // One big one, beating.
+            listOf(
+                topped(smitten(), "....HH.HH....."),
+                listOf("...HHHHHHH....", "....HHHHH.....") + smitten().drop(2),
+                listOf("....HH.HH.....", ".....HHH......") + smitten().drop(2),
+                topped(smitten(), ".....H.H......"),
+            ),
         ),
     )
 }

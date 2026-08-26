@@ -41,18 +41,26 @@ fun ClawdView(
      */
     phase: Int = 0,
 ) {
-    val frames = Clawd.frames[state] ?: return
+    val variants = Clawd.frames[state] ?: return
     val offset = (phase % 100_000).let { if (it < 0) -it else it }
 
-    var index by remember(state, phase) { mutableIntStateOf(offset % frames.size) }
+    // Which of the state's animations this crab plays, fixed by whatever it represents.
+    //
+    // A trade, not a carousel: one session's crab works at a laptop and another's at an anvil,
+    // and each keeps to it. Cycling through all three looked like one animal that could not
+    // decide what its job was — and it made two crabs indistinguishable given enough time,
+    // which is the opposite of what the variants are for.
+    val frames = variants[offset % variants.size]
+
+    var index by remember(state, phase) { mutableIntStateOf(0) }
     LaunchedEffect(state, phase) {
         // Frame holds are per state and per frame, because a blink and a stomp are not the
         // same thing at the same rate: eight frames a second is right for stomping and reads
         // as a nervous tic on a pair of eyes.
-        index = offset % frames.size
+        index = 0
         while (true) {
             delay(Clawd.hold(state, index))
-            index++
+            index = (index + 1) % frames.size
         }
     }
 
