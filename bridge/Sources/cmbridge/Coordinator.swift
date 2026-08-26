@@ -29,6 +29,10 @@ actor Coordinator {
     /// This bridge's window. Read from outside the actor, so it never changes after init.
     nonisolated let window: TimeInterval
 
+    /// How long this bridge waits for a vanished phone. Injected so tests need not sit
+    /// through half a minute to watch the queue let go.
+    nonisolated let linkGrace: TimeInterval
+
     /// Tools whose permission prompt cannot be usefully answered from a phone.
     ///
     /// Approving AskUserQuestion does not answer the question — it only lets the terminal ask
@@ -37,6 +41,12 @@ actor Coordinator {
     nonisolated let skippedTools: Set<String>
 
     static let defaultSkippedTools: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
+
+    /// How long a vanished phone has to come back before the queue is let go.
+    ///
+    /// Longer than a reconnect takes and far shorter than the window, so a flicker costs a few
+    /// seconds of nothing and a phone genuinely left behind still fails open.
+    static let defaultLinkGrace: TimeInterval = 30
 
     private struct Pending {
         let id: String
@@ -78,16 +88,22 @@ actor Coordinator {
     /// phone decides for itself how long it is still worth reacting to.
     private var resolved: Resolution?
 
+    /// Bumped on every link change, so a grace timer can tell whether it still speaks for the
+    /// disconnection it was started for.
+    private var linkGeneration: UInt64 = 0
+
     init(
         link: any LinkSink,
         log: Logger,
         window: TimeInterval = Coordinator.defaultWindow,
-        skippedTools: Set<String> = Coordinator.defaultSkippedTools
+        skippedTools: Set<String> = Coordinator.defaultSkippedTools,
+        linkGrace: TimeInterval = Coordinator.defaultLinkGrace
     ) {
         self.link = link
         self.log = log
         self.window = window
         self.skippedTools = skippedTools
+        self.linkGrace = linkGrace
     }
 
     // MARK: - Session bookkeeping
@@ -304,16 +320,36 @@ actor Coordinator {
 
     func linkChanged(_ up: Bool) {
         log.info(up ? "phone linked" : "phone unlinked")
+        linkGeneration &+= 1
         if up {
             pushSnapshot()
             return
         }
-        // With the link gone nobody is going to answer. Releasing the whole queue at once
-        // beats leaving several terminals blocked for the rest of their windows.
+        // A dropped link is usually a reconnect a few seconds later: the phone carried out of
+        // range, the radio hiccuping, the app being replaced by an update. Measured here, the
+        // gap between "link down" and "phone linked" was three to five seconds every time.
+        //
+        // Releasing the queue at the first flicker turns that into a decision taken somewhere
+        // you were not looking — the terminal prompts, and the request you were about to
+        // answer in your hand is gone. So the queue waits. Against a window of half an hour,
+        // half a minute costs nothing.
+        let generation = linkGeneration
+        let grace = linkGrace
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(grace * 1_000_000_000))
+            await self?.releaseIfStillGone(generation)
+        }
+    }
+
+    /// Gives up on the phone, if it has not come back in the meantime.
+    func releaseIfStillGone(_ generation: UInt64) {
+        // Any link change since scheduling this makes it stale: either the phone returned, or
+        // it left again and a newer timer owns the decision.
+        guard generation == linkGeneration, !link.isLinked else { return }
         let stranded = queue
         queue.removeAll()
         for pending in stranded {
-            log.decision("\(pending.id) released, phone went away")
+            log.decision("\(pending.id) released, phone did not come back")
             pending.continuation.resume(returning: nil)
         }
     }

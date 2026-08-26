@@ -141,10 +141,10 @@ struct QueueTests {
         #expect(await pending.value.isAllow)
     }
 
-    @Test("releases everything queued when the phone goes away")
+    @Test("releases everything queued when the phone stays away")
     func releasesOnUnlink() async throws {
         let link = FakeLink()
-        let coordinator = Coordinator(link: link, log: Logger())
+        let coordinator = Coordinator(link: link, log: Logger(), linkGrace: 0.05)
 
         let first = Task { await coordinator.decide(request(tool: "Bash", hint: "one")) }
         let second = Task { await coordinator.decide(request(tool: "Write", hint: "two")) }
@@ -158,6 +158,30 @@ struct QueueTests {
         #expect(await first.value.isNoDecision)
         #expect(await second.value.isNoDecision)
         #expect(await coordinator.queueDepth == 0)
+    }
+
+    @Test("keeps the queue through a link that comes straight back")
+    func survivesAFlicker() async throws {
+        let link = FakeLink()
+        let coordinator = Coordinator(link: link, log: Logger(), linkGrace: 0.4)
+
+        let pending = Task { await coordinator.decide(request(tool: "Bash", hint: "one")) }
+        try await settle { await coordinator.queueDepth == 1 }
+
+        // What a reinstall of the phone app looks like from here: gone, back four seconds
+        // later. Dumping the queue at the first flicker hands the decision to a terminal
+        // nobody is watching.
+        link.setLinked(false)
+        await coordinator.linkChanged(false)
+        link.setLinked(true)
+        await coordinator.linkChanged(true)
+
+        try await Task.sleep(nanoseconds: 600_000_000)
+        #expect(await coordinator.queueDepth == 1)
+
+        let id = try #require(await coordinator.headID)
+        await coordinator.resolve(Decision(id: id, decision: .once))
+        #expect(await pending.value.isAllow)
     }
 
     @Test("withdraws a request whose caller has gone away")
