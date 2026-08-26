@@ -12,6 +12,10 @@ enum NUS {
 /// Head of the approval queue, rendered on the phone.
 struct Prompt: Codable, Equatable {
     let id: String
+    /// Which session is asking. The phone puts the question next to that session's own pet
+    /// rather than drawing a second one; matching on the working directory instead put two
+    /// checkouts of the same repository in the same conversation.
+    let session: String
     let tool: String
     /// Truncated by the bridge; see `Prompt.hintLimit`.
     let hint: String
@@ -22,12 +26,19 @@ struct Prompt: Codable, Equatable {
 
     static let hintLimit = 512
 
-    static func truncatingHint(id: String, tool: String, hint: String, cwd: String, expires: Int) -> Prompt {
+    static func truncatingHint(
+        id: String,
+        session: String,
+        tool: String,
+        hint: String,
+        cwd: String,
+        expires: Int
+    ) -> Prompt {
         var h = hint
         if h.utf8.count > hintLimit {
             h = String(decoding: Array(h.utf8.prefix(hintLimit)), as: UTF8.self) + "…"
         }
-        return Prompt(id: id, tool: tool, hint: h, cwd: cwd, expires: expires)
+        return Prompt(id: id, session: session, tool: tool, hint: h, cwd: cwd, expires: expires)
     }
 }
 

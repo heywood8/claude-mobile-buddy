@@ -22,6 +22,8 @@ object Nus {
 @Serializable
 data class Prompt(
     val id: String,
+    /** Which session is asking, so the question sits beside that session's own pet. */
+    val session: String = "",
     val tool: String,
     val hint: String,
     val cwd: String = "",

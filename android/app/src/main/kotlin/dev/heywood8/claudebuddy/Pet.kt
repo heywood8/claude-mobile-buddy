@@ -108,10 +108,7 @@ object Pet {
      * is a fair description of the situation.
      */
     fun sessionState(session: SessionSummary, snapshot: Snapshot): PetState {
-        val prompt = snapshot.prompt
-        if (prompt != null && prompt.cwd.isNotEmpty() && prompt.cwd == session.cwd) {
-            return PetState.ATTENTION
-        }
+        if (snapshot.prompt?.session == session.id) return PetState.ATTENTION
 
         // Its own request, answered somewhere else. This is the one that carries a session id,
         // so unlike the prompt it lands on exactly the right crab.

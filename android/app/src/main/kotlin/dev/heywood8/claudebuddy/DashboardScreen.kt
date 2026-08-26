@@ -77,9 +77,8 @@ fun DashboardScreen(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    PendingDecision(withButtons = false)
+                    Sessions(withButtons = false)
                     Status()
-                    Sessions()
                 }
                 Column(
                     Modifier.width(240.dp).fillMaxHeight(),
@@ -114,9 +113,8 @@ fun DashboardScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     MenuButton { settingsOpen = true }
                 }
-                PendingDecision(withButtons = true)
+                Sessions(withButtons = true)
                 Status()
-                Sessions()
             }
         }
     }
@@ -154,50 +152,6 @@ private fun MenuButton(onClick: () -> Unit) {
                     topLeft = Offset(0f, size.height * fraction - thickness / 2f),
                     size = Size(size.width, thickness),
                 )
-            }
-        }
-    }
-}
-
-/**
- * The request, as something the crab is saying.
- *
- * A card headed "Approve Bash?" is the machine talking about itself. The same words in a
- * bubble beside the thing that wants them are a question from somebody, which is what an
- * approval is.
- */
-@Composable
-private fun PendingDecision(withButtons: Boolean) {
-    val prompt = BuddyState.snapshot?.prompt ?: return
-    val bubble = MaterialTheme.colorScheme.surfaceVariant
-
-    Row(Modifier.fillMaxWidth()) {
-        ClawdView(PetState.ATTENTION, Modifier.width(80.dp).height(72.dp))
-        BubbleTail(bubble, Modifier.padding(top = 20.dp))
-        Surface(
-            color = bubble,
-            shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.weight(1f),
-        ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
-                Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
-                if (prompt.cwd.isNotEmpty()) {
-                    Text(
-                        shortPath(prompt.cwd, Settings.pathDepth(LocalContext.current)),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                if (withButtons) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
-                        }) { Text("Allow") }
-                        OutlinedButton(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
-                        }) { Text("Deny") }
-                    }
-                }
             }
         }
     }
@@ -251,21 +205,21 @@ private fun Status() {
  * a column of them does not blink in unison and stop looking like separate animals.
  */
 @Composable
-private fun Sessions() {
+private fun Sessions(withButtons: Boolean) {
     val snapshot = BuddyState.snapshot ?: return
-    if (snapshot.sessions.isEmpty()) return
     val depth = Settings.pathDepth(LocalContext.current)
+    val prompt = snapshot.prompt
 
-    Text("Sessions", style = MaterialTheme.typography.titleSmall)
     for (session in snapshot.sessions) {
+        val asking = prompt?.takeIf { it.session == session.id }
         Row(
-            Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ClawdView(
                 state = Pet.sessionState(session, snapshot),
-                modifier = Modifier.width(64.dp).height(52.dp),
+                modifier = Modifier.width(64.dp).height(56.dp),
                 phase = session.id.hashCode(),
             )
             Column(Modifier.weight(1f)) {
@@ -273,12 +227,60 @@ private fun Sessions() {
                     session.cwd.ifEmpty { session.id.take(8) }.let { shortPath(it, depth) },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                // What you asked for, above what it has been doing about it. An hour later
-                // this is the line that says whether the approval on screen makes sense.
-                if (session.task.isNotEmpty()) {
-                    Text(session.task, style = MaterialTheme.typography.bodyMedium)
+                if (asking != null) {
+                    // The question belongs to this session, so it is asked here rather than by
+                    // a second crab drawn at the top of the screen with nothing else to do.
+                    Bubble(asking, withButtons)
+                } else {
+                    // What you asked for, above what it has been doing about it. An hour
+                    // later this is the line that says whether an approval makes sense.
+                    if (session.task.isNotEmpty()) {
+                        Text(session.task, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(
+                        describe(session, snapshot.now),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
-                Text(describe(session, snapshot.now), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+    // A request whose session the bridge never told us about — a session that started before
+    // the bridge did, and has not called a tool since. Rare, and it must not swallow the one
+    // thing on this screen that cannot wait.
+    if (prompt != null && snapshot.sessions.none { it.id == prompt.session }) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ClawdView(PetState.ATTENTION, Modifier.width(64.dp).height(56.dp))
+            Column(Modifier.weight(1f)) { Bubble(prompt, withButtons) }
+        }
+    }
+}
+
+/** What the crab beside it is saying. */
+@Composable
+private fun Bubble(prompt: Prompt, withButtons: Boolean) {
+    val bubble = MaterialTheme.colorScheme.surfaceVariant
+    Row(verticalAlignment = Alignment.Top) {
+        BubbleTail(bubble, Modifier.padding(top = 10.dp))
+        Surface(color = bubble, shape = RoundedCornerShape(6.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
+                Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
+                if (withButtons) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                        }) { Text("Allow") }
+                        OutlinedButton(onClick = {
+                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                        }) { Text("Deny") }
+                    }
+                }
             }
         }
     }

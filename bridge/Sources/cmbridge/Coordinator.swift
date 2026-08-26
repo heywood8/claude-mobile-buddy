@@ -259,6 +259,7 @@ actor Coordinator {
         let deadline = Date().addingTimeInterval(window)
         let prompt = Prompt.truncatingHint(
             id: id,
+            session: request.sessionID,
             tool: request.toolName,
             hint: request.hint,
             cwd: request.cwd,
