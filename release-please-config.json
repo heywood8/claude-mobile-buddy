@@ -15,7 +15,13 @@
     },
     "bridge": {
       "release-type": "simple",
-      "component": "bridge"
+      "component": "bridge",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "Resources/Info.plist"
+        }
+      ]
     }
   }
 }
