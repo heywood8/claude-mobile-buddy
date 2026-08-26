@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
@@ -73,11 +75,16 @@ fun DashboardScreen(
         val wide = maxWidth > 600.dp
         if (wide) {
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Sessions(withButtons = false)
+                // The sessions scroll; the status is pinned to the floor under them. It is
+                // what you read when nothing is happening, and it should be in the same place
+                // every time rather than wherever the last crab happened to end.
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Sessions(withButtons = false)
+                    }
                     Status()
                 }
                 Column(
@@ -106,14 +113,16 @@ fun DashboardScreen(
                 }
             }
         } else {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     MenuButton { settingsOpen = true }
                 }
-                Sessions(withButtons = true)
+                Column(
+                    Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Sessions(withButtons = true)
+                }
                 Status()
             }
         }
@@ -219,7 +228,9 @@ private fun Sessions(withButtons: Boolean) {
         ) {
             ClawdView(
                 state = Pet.sessionState(session, snapshot),
-                modifier = Modifier.width(64.dp).height(56.dp),
+                // Fourteen cells across a smaller box put the laptop below one device pixel a
+                // cell, where it stopped being a laptop.
+                modifier = Modifier.width(84.dp).height(68.dp),
                 phase = session.id.hashCode(),
             )
             Column(Modifier.weight(1f)) {
@@ -255,7 +266,7 @@ private fun Sessions(withButtons: Boolean) {
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ClawdView(PetState.ATTENTION, Modifier.width(64.dp).height(56.dp))
+            ClawdView(PetState.ATTENTION, Modifier.width(84.dp).height(68.dp))
             Column(Modifier.weight(1f)) { Bubble(prompt, withButtons) }
         }
     }
@@ -270,7 +281,16 @@ private fun Bubble(prompt: Prompt, withButtons: Boolean) {
         Surface(color = bubble, shape = RoundedCornerShape(6.dp)) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
-                Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
+                // The bridge already trims this to 512 bytes, which is still a screenful of
+                // shell. Six lines is enough to recognise a command; the rest is in the
+                // terminal that wrote it, and a bubble that fills the display pushes the
+                // buttons off the bottom.
+                Text(
+                    prompt.hint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (withButtons) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {

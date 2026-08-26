@@ -158,7 +158,7 @@ object Clawd {
         face,
         DESK_WIDE,
         screen,
-        ".SSSSSSSSSSSS.",
+        ".KSSSSSSSSSSK.",
         keys,
         BLANK,
     )
@@ -201,10 +201,10 @@ object Clawd {
         // working animal read as an animal on its way somewhere, which is the opposite of what
         // this state means.
         PetState.BUSY to listOf(
-            typing(screen = ".SWWWSSSSSSSS.", keys = "KKLKKKKKKLKKKK", face = EYES_OPEN_LOW),
-            typing(screen = ".SWWWWSSSSSSS.", keys = "KKKLKKKKKKLKKK", face = EYES_OPEN_LOW),
-            typing(screen = ".SWWWWWSSSSSS.", keys = "KKLKKKKKKKLKKK", face = EYES_RIGHT_LOW),
-            typing(screen = ".SWWSSSSSSSSS.", keys = "KKKLKKKKKLKKKK", face = EYES_OPEN_LOW),
+            typing(screen = ".KSWWWSSSSSSK.", keys = "KKLKKKKKKLKKKK", face = EYES_OPEN_LOW),
+            typing(screen = ".KSWWWWSSSSSK.", keys = "KKKLKKKKKKLKKK", face = EYES_OPEN_LOW),
+            typing(screen = ".KSWWWWWSSSSK.", keys = "KKLKKKKKKKLKKK", face = EYES_RIGHT_LOW),
+            typing(screen = ".KSWWSSSSSSSK.", keys = "KKKLKKKKKLKKKK", face = EYES_OPEN_LOW),
         ),
         PetState.ATTENTION to listOf(
             raised(
