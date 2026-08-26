@@ -62,10 +62,16 @@ android {
             // running commands on a workstation, and a debuggable app hands its own identity
             // to anyone with adb access.
             isDebuggable = false
-            // R8 is off until the keep rules for kotlinx.serialization and ZXing are written
-            // and verified on a device. Shipping a silently broken decoder would be worse
-            // than shipping a larger APK.
-            isMinifyEnabled = false
+            // Both things R8 could break here fail silently rather than loudly — a snapshot
+            // that no longer decodes, a camera that looks at a valid code and does nothing —
+            // so proguard-rules.pro keeps the serializers and the whole ZXing surface rather
+            // than trusting the analysis.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.findByName("release")
         }
     }

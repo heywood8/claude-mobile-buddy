@@ -38,6 +38,12 @@ class BuddyService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
         )
 
+        // Every way back in funnels through here — boot, package replaced, opening the app,
+        // a sticky restart — and they overlap: on this device the boot broadcast and the
+        // activity landed 24 ms apart. A second pass used to build a second advertiser and a
+        // second GATT server, drop the reference to the first, and leave it running.
+        if (peripheral != null) return START_STICKY
+
         val peripheral = SecurePeripheral(
             context = this,
             deviceName = Build.MODEL,
