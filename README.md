@@ -40,7 +40,7 @@ claude (CLI)  --HTTP-->  bridge.app (macOS)  --BLE/NUS-->  phone (Android)
 ```
 cmbridge pair --png        # scan the code with the phone app
 cmbridge install-hook      # merge the hooks into ~/.claude/settings.json
-make app                   # build the bundle
+make install               # build the bundle and copy it to ~/Applications
 cmbridge print-agent       # the LaunchAgent that runs it at login
 ```
 
@@ -49,6 +49,11 @@ writing anything, keeping the previous file as `settings.json.bak`. It appends t
 you already use rather than replacing them, and re-running it updates its own entry instead of
 leaving a stale one behind. `print-hook` still prints the snippet if you would rather paste it
 yourself.
+
+`make install` puts the bundle in `~/Applications` and stops; loading the agent is left to you.
+The copy matters because launchd stores the path it is handed and never looks again — an agent
+pointed into the build directory works until the first `make clean` or the first time the
+checkout moves, and then fails silently, respawning a file that is no longer there.
 
 ## What reaches the phone
 
@@ -60,6 +65,18 @@ working, not failing.
 
 The `PostToolUse` entry approves nothing. It fires after the fact and feeds the recent-calls
 list on the dashboard, and the whole thing works without it.
+
+To keep working in `auto` and still have particular things reach you, name them in
+`permissions.ask` in `~/.claude/settings.json` — `ask` outranks `allow`, so a rule you set at
+user scope holds whatever an individual project's settings say. `bypassPermissions` is the
+exception: it ignores the permission rules entirely, so nothing is ever asked and nothing ever
+reaches the phone.
+
+Claude Code reads its configuration once, when a session starts. A session already running
+keeps the hooks and permission rules it started with, so `install-hook` and any edit to
+`permissions.ask` take effect in the *next* session, not the one you are sitting in. A phone
+that stays quiet right after either is the expected outcome, and restarting the session is the
+whole fix.
 
 ## Security
 

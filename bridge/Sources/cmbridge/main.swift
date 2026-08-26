@@ -139,6 +139,16 @@ case "print-agent":
     // the hook block is.
     let executable = Bundle.main.executableURL?.path
         ?? CommandLine.arguments[0]
+    // launchd stores this path verbatim and never looks at it again. Printed from a build
+    // directory it names something `make clean` deletes and moving the checkout renames, and
+    // the failure is quiet: launchd respawns a missing file forever and the only trace is a
+    // log nobody has a reason to open.
+    if executable.contains("/.build/") || executable.contains("/dist/") {
+        log.error("""
+        this is the copy at \(executable) — run `make install` and print the agent from the \
+        installed bundle, or the agent breaks the first time you move or clean the checkout
+        """)
+    }
     print("""
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

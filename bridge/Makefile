@@ -1,6 +1,8 @@
 SWIFT ?= swift
 APP := dist/cmbridge.app
 BINARY := .build/release/cmbridge
+PREFIX ?= $(HOME)/Applications
+INSTALLED := $(PREFIX)/cmbridge.app
 
 .PHONY: all test release app install clean
 
@@ -29,13 +31,28 @@ app: release
 	@codesign --verify --verbose=1 $(APP) 2>&1 | sed 's/^/  /'
 	@echo "built $(APP)"
 
-# Deliberately no launchctl here. Loading an agent writes to ~/Library/LaunchAgents and
-# arranges for something to run at every login; that is the user's decision to make, the same
-# way the hook block is. `cmbridge print-agent` prints what to install.
+# Copies the bundle out of the build directory, and stops there. Loading an agent writes to
+# ~/Library/LaunchAgents and arranges for something to run at every login; that is the user's
+# decision to make, the same way the hook block is. `cmbridge print-agent` prints what to load.
+#
+# The copy is the point. launchd stores the path it is given and never revisits it, so an agent
+# pointed into dist/ dies the first time you `make clean` or move the checkout — and dies
+# quietly, respawning a file that is no longer there.
 install: app
-	@echo "Built. To run it at login:"
-	@echo "  $(APP)/Contents/MacOS/cmbridge print-agent > ~/Library/LaunchAgents/dev.heywood8.cmbridge.plist"
+	mkdir -p $(PREFIX)
+	rm -rf $(INSTALLED)
+	cp -R $(APP) $(INSTALLED)
+	@codesign --verify --verbose=1 $(INSTALLED) 2>&1 | sed 's/^/  /'
+	@echo "installed $(INSTALLED)"
+	@echo
+	@echo "To run it at login:"
+	@echo "  $(INSTALLED)/Contents/MacOS/cmbridge print-agent > ~/Library/LaunchAgents/dev.heywood8.cmbridge.plist"
 	@echo "  launchctl load ~/Library/LaunchAgents/dev.heywood8.cmbridge.plist"
+	@echo
+	@echo "Already loaded? Replacing the bundle leaves the old copy running:"
+	@echo "  launchctl kickstart -k gui/$$(id -u)/dev.heywood8.cmbridge"
+	@echo
+	@echo "macOS may ask for Bluetooth again at the new location."
 
 clean:
 	rm -rf dist .build
