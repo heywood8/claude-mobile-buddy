@@ -8,17 +8,14 @@ The upstream reference implementation (`anthropics/claude-desktop-buddy`) is a v
 feeds on approvals. v1 deliberately ships the control surface only; the pet is what makes it
 pleasant, not what makes it work.
 
-- `heart`, the one upstream state not built. The other seven are, plus `finished` and
-  `resting`, which upstream has no equivalent of because an ESP32 never knew whether you had
-  read the answer either.
 - Species picker. Upstream ships 18 ASCII species plus GIF character packs. Worth having when
   there is a second species worth picking; the frame tables are already data, so adding one is
   a text edit.
 - GIF rendering from local device storage. We will **not** implement the `char_begin` /
   `file` / `chunk` / `file_end` / `char_end` folder-push transfer: streaming GIFs over BLE
   exists because an ESP32 has no filesystem the user can reach. A phone does.
-- Accelerometer input: shake -> `dizzy`, face-down -> nap / energy refill.
-- Level-ups. Upstream celebrates every 50K tokens; the count that needs exists now.
+- Energy, and anything else that would make the pet a game rather than a readout.
+
 
 ## Claude Desktop app compatibility
 
@@ -40,11 +37,6 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 ## Protocol extensions
 
-- `prompts[]` array replacing the single `prompt` field, so several pending approvals can be
-  rendered at once. This was refused on the grounds that a phone screen is a poor place for a
-  queue of five — which was true while the screen had one card on it. It no longer is: each
-  session now has a row of its own, and a request is drawn as that session's crab asking. Two
-  sessions asking at once is two crabs asking, which is the layout the app already has.
 - Multiple hosts connected simultaneously. The keyring already stores several hosts and the
   handshake already carries a host id, but only one host is served at a time — a second one is
   refused with a reason. Serving both breaks the single FIFO queue and makes it ambiguous whose
@@ -61,10 +53,10 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 ## Android
 
-- Wear OS companion.
-- iOS. CoreBluetooth can act as a peripheral, but a backgrounded iOS app drops the local name
-  from its advertisement and moves service UUIDs into the overflow area, where a desktop scanner
-  will not see them. This is why the phone app is native Android rather than React Native.
+- Wear OS and iOS: **dropped**. One Pixel is the whole audience. Recorded so the reasoning is
+  not rediscovered: a backgrounded iOS app drops the local name from its advertisement and
+  moves service UUIDs into the overflow area, where a desktop scanner will not see them —
+  which is also why the phone app is native Android rather than React Native.
 
 ## Pairing
 
