@@ -3,20 +3,24 @@ package dev.heywood8.claudebuddy
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -91,25 +98,53 @@ fun DashboardScreen(
     }
 }
 
+/**
+ * The request, as something the crab is saying.
+ *
+ * A card asking "Approve Bash?" is the machine talking about itself. The same words in a
+ * bubble beside the thing that wants them are a question from somebody, which is what an
+ * approval actually is — and it puts the pet on the one screen where you were going to look
+ * anyway, instead of parking it above as decoration.
+ */
 @Composable
 private fun PendingDecision() {
     val prompt = BuddyState.snapshot?.prompt ?: return
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Approve ${prompt.tool}?", style = MaterialTheme.typography.titleLarge)
-            Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
-            if (prompt.cwd.isNotEmpty()) {
-                Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
-                }) { Text("Allow") }
-                OutlinedButton(onClick = {
-                    BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
-                }) { Text("Deny") }
+    val bubble = MaterialTheme.colorScheme.surfaceVariant
+
+    Row(Modifier.fillMaxWidth()) {
+        ClawdView(PetState.ATTENTION, Modifier.width(80.dp).height(72.dp))
+        BubbleTail(bubble, Modifier.padding(top = 20.dp))
+        Surface(
+            color = bubble,
+            shape = RoundedCornerShape(6.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
+                Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
+                if (prompt.cwd.isNotEmpty()) {
+                    Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                    }) { Text("Allow") }
+                    OutlinedButton(onClick = {
+                        BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                    }) { Text("Deny") }
+                }
             }
         }
+    }
+}
+
+/** Stepped, not tapered: a smooth triangle next to a thing made of squares looks borrowed. */
+@Composable
+private fun BubbleTail(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.width(12.dp).height(24.dp)) {
+        val step = 6.dp.toPx()
+        drawRect(color, Offset(size.width - step, 0f), Size(step, step * 3))
+        drawRect(color, Offset(size.width - step * 2, step), Size(step, step))
     }
 }
 
@@ -121,6 +156,10 @@ private fun PendingDecision() {
  */
 @Composable
 private fun PetView() {
+    // While something is waiting, the crab is in the bubble asking about it. Two of him on one
+    // screen, one of them saying nothing, would read as a bug rather than as a pet.
+    if (BuddyState.snapshot?.prompt != null) return
+
     // A slow tick, only so the mood is recomputed against a current clock: without it the pet
     // would sit in whatever state the last snapshot left it in. The animation itself runs on
     // its own clock inside ClawdView.
@@ -141,7 +180,7 @@ private fun PetView() {
         phoneNow = System.currentTimeMillis() / 1000,
     )
 
-    ClawdView(state)
+    ClawdView(state, Modifier.fillMaxWidth().height(104.dp))
 
     val level = Pet.level(snapshot?.tokens ?: 0)
     Text(

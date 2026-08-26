@@ -7,8 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -61,7 +58,9 @@ fun ClawdView(state: PetState, modifier: Modifier = Modifier) {
     val rows = frame.size
     val cols = frame.maxOf { it.length }
 
-    Canvas(modifier.fillMaxWidth().height(104.dp)) {
+    // The caller owns the size. He is a status widget in one place and a speaker in another,
+    // and the two want different room.
+    Canvas(modifier) {
         val cell = floor(minOf(size.width / cols, size.height / rows))
         if (cell < 1f) return@Canvas
         val originX = ((size.width - cell * cols) / 2f).roundToInt().toFloat()
