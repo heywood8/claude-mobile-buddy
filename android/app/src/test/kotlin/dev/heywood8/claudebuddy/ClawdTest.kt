@@ -10,15 +10,20 @@ import org.junit.Test
  * reads on screen as a glitch rather than as a typo.
  */
 class ClawdTest {
-    private val expectedRows = 9
     private val expectedColumns = 14
 
+    /**
+     * Height is per animation rather than fixed: the breaker needs more rows than the crab to
+     * fit a face in. Within one animation it must not move, or the sprite changes size between
+     * frames — which reads as the whole thing lurching.
+     */
     @Test
-    fun `every frame is the same size`() {
+    fun `frames keep their shape within an animation`() {
         for ((state, variants) in Clawd.frames) {
             for ((v, frames) in variants.withIndex()) {
+                val height = frames.first().size
                 for ((f, frame) in frames.withIndex()) {
-                    assertEquals("$state variant $v frame $f height", expectedRows, frame.size)
+                    assertEquals("$state variant $v frame $f height", height, frame.size)
                     for ((r, row) in frame.withIndex()) {
                         assertEquals(
                             "$state variant $v frame $f row $r width",

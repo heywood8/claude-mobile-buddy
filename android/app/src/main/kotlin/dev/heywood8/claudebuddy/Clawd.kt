@@ -269,13 +269,19 @@ object Clawd {
     private const val BROW_WIDE = "..NN.CCCC.NN.."
     private const val BROW_LEAN = "..NN.CCC..NN.."
 
-    private const val EYES_RED = ".PPYYPPPPYYPP."
-    private const val EYES_NARROW = ".PPPYPPPPYPPP."
+    private const val EYES_RED = "..PPYYPPYYPP.."
+    private const val EYES_NARROW = "..PPPYPPYPPP.."
 
-    /** Shut, bared, and open on a roar. Gold, because that is what he has instead of a smile. */
-    private const val JAW_SHUT = ".PPAAAAAAAAPP."
-    private const val JAW_TEETH = ".PAAAAAAAAAAP."
-    private const val JAW_ROAR = ".PEAEAEAEAEEP."
+    /**
+     * Shut, bared, and open on a roar.
+     *
+     * White fangs against a dark mouth, red down the throat when it opens. The gold on him is
+     * the ring through his nose and nothing else — a whole mouth of it, which is what the
+     * first version drew, made him look like he was grinning with a mouthful of coins.
+     */
+    private const val JAW_SHUT = "..PWWWWWWWWP.."
+    private const val JAW_TEETH = "..PWEWEWEWEP.."
+    private const val JAW_ROAR = "..PWHHHHHHWP.."
 
     /** Four of them, because he runs on four. Three phases of a gallop. */
     private const val LEGS_PLANTED = ".PP.PP..PP.PP."
@@ -295,10 +301,13 @@ object Clawd {
             "NN..........NN",
             crest,
             brow,
-            "..PPPPPPPPPP..",
+            "...NNCCCCNN...",
+            "...PPPPPPPP...",
             eyes,
-            ".PPPPPAAPPPPP.",
+            "..PPPPPPPPPP..",
+            "...PPPAAPPP...",
             jaw,
+            "...PPPPPPPP...",
             "..PPPPPPPPPP..",
             legs,
         )
