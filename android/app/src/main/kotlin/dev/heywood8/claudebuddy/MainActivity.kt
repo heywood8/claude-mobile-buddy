@@ -77,6 +77,9 @@ class MainActivity : ComponentActivity() {
         // Sets up the transparent system bars *and* the icon contrast that goes with them, so
         // the clock stays legible whichever way the theme falls.
         enableEdgeToEdge()
+        // Opening the app is not how you ask for the buddy — it is how you look at it. If it
+        // was running before a reboot or an update, it comes back here without a tap.
+        BuddyLauncher.resume(this, "app launch")
         setContent {
             val dark = isSystemInDarkTheme()
             MaterialTheme(colorScheme = colorScheme(dark)) {
@@ -126,7 +129,11 @@ class MainActivity : ComponentActivity() {
                         Screen.DASHBOARD -> DashboardScreen(
                             modifier = modifier,
                             onStart = ::requestAndStart,
-                            onStop = { stopService(Intent(this, BuddyService::class.java)) },
+                            onStop = {
+                                // The one thing that means "stay down".
+                                Settings.setShouldRun(this, false)
+                                stopService(Intent(this, BuddyService::class.java))
+                            },
                             onPair = {
                                 afterPairing = Screen.DASHBOARD
                                 withCamera { screen = Screen.PAIRING }

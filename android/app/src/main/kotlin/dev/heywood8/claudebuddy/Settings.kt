@@ -7,6 +7,7 @@ object Settings {
     private const val PREFS = "settings"
     private const val NOTIFICATIONS = "notifications"
     private const val KEEP_SCREEN_ON = "keepScreenOn"
+    private const val SHOULD_RUN = "shouldRun"
 
     /**
      * Whether a pending approval raises a notification.
@@ -36,6 +37,24 @@ object Settings {
 
     fun setKeepScreenOn(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEEP_SCREEN_ON, enabled).apply()
+    }
+
+    /**
+     * Whether the buddy is meant to be up.
+     *
+     * Cleared only by Stop. Everything else that takes the service down — a reboot, an
+     * update, the system reclaiming the process — is not a decision you made and is not
+     * remembered as one.
+     *
+     * Default true, so being up is the resting state and Stop is the exception. On a phone
+     * with nothing paired and no permissions granted this changes nothing: resuming checks
+     * both before it starts anything.
+     */
+    fun shouldRun(context: Context): Boolean =
+        prefs(context).getBoolean(SHOULD_RUN, true)
+
+    fun setShouldRun(context: Context, value: Boolean) {
+        prefs(context).edit().putBoolean(SHOULD_RUN, value).apply()
     }
 
     private fun prefs(context: Context) =

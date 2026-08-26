@@ -61,6 +61,9 @@ class BuddyService : Service() {
             if (Keyring.hosts(this).isEmpty()) stopSelf()
         }
         Journal.prune(this)
+        // Remembered here rather than at the button, so a service the system started on its
+        // own — sticky restart, boot, update — also counts as "should be up".
+        Settings.setShouldRun(this, true)
         BuddyState.setRunning(true)
         return START_STICKY
     }

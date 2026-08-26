@@ -55,6 +55,11 @@ The copy matters because launchd stores the path it is handed and never looks ag
 pointed into the build directory works until the first `make clean` or the first time the
 checkout moves, and then fails silently, respawning a file that is no longer there.
 
+On the phone, Start is a one-time thing. The service records that it is meant to be up and
+comes back by itself after a reboot or an app update — the two events that otherwise take it
+away without saying so, and you find out when a decision you were waiting for turns up in the
+terminal instead of your hand. Stop is the only thing that keeps it down.
+
 ## What reaches the phone
 
 Only the requests Claude Code would have put in front of you anyway. The `PermissionRequest`
