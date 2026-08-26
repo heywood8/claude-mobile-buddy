@@ -273,20 +273,15 @@ object Clawd {
     private const val EYES_NARROW = "..PPPYPPYPPP.."
 
     /**
-     * Shut, bared, and open on a roar.
+     * Two fangs, a snarl, and a roar.
      *
-     * White fangs against a dark mouth, red down the throat when it opens. The gold on him is
-     * the ring through his nose and nothing else — a whole mouth of it, which is what the
-     * first version drew, made him look like he was grinning with a mouthful of coins.
+     * Only the fangs show. A row of teeth from cheek to cheek — which both earlier versions
+     * drew, first in gold and then in white — is a grin from ear to ear, and he does not smile.
      */
-    private const val JAW_SHUT = "..PWWWWWWWWP.."
-    private const val JAW_TEETH = "..PWEWEWEWEP.."
-    private const val JAW_ROAR = "..PWHHHHHHWP.."
+    private const val JAW_FANGS = "...PWPPPPWP..."
+    private const val JAW_SNARL = "...PWEEEEWP..."
+    private const val JAW_ROAR = "..PWEHHHHEWP.."
 
-    /** Four of them, because he runs on four. Three phases of a gallop. */
-    private const val LEGS_PLANTED = ".PP.PP..PP.PP."
-    private const val LEGS_REACH = "PP..PP..PP..PP"
-    private const val LEGS_GATHER = "..PP.PP.PP.PP."
 
     /**
      * Not a crab at all: a head, and everything that hangs off it.
@@ -296,7 +291,7 @@ object Clawd {
      * Underneath, shoulders and four legs: he charges on all fours, and two would make him a
      * different animal.
      */
-    private fun breaker(crest: String, brow: String, eyes: String, jaw: String, legs: String) =
+    private fun breaker(crest: String, brow: String, eyes: String, jaw: String) =
         listOf(
             "NNN........NNN",
             crest,
@@ -309,9 +304,10 @@ object Clawd {
             jaw,
             "...PPPPPPPP...",
             // Pauldrons. He is armoured in every picture of him, and two grey cells at the
-            // shoulders are the whole of it at this size.
+            // shoulders are the whole of it at this size. Nothing below them: the icon is a
+            // bust, and legs on a fourteen-cell grid were four blue smudges.
             "..KPPPPPPPPK..",
-            legs,
+            BLANK,
         )
 
     /** Holding something up over its head — the page, mostly. */
@@ -677,24 +673,24 @@ object Clawd {
         PetState.BREAKER to listOf(
             // Staring you down while the crest burns.
             listOf(
-                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_TEETH, LEGS_PLANTED),
-                breaker(CREST_LEAN, BROW_LEAN, EYES_RED, JAW_SHUT, LEGS_REACH),
-                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_TEETH, LEGS_PLANTED),
-                breaker(CREST_LOW, BROW_LEAN, EYES_RED, JAW_TEETH, LEGS_GATHER),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_FANGS),
+                breaker(CREST_LEAN, BROW_LEAN, EYES_RED, JAW_SNARL),
+                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_FANGS),
+                breaker(CREST_LOW, BROW_LEAN, EYES_RED, JAW_FANGS),
             ),
             // Roaring.
             listOf(
-                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_ROAR, LEGS_REACH),
-                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_PLANTED),
-                breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_TEETH, LEGS_GATHER),
-                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_REACH),
+                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_ROAR),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR),
+                breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_FANGS),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR),
             ),
             // Winding up, side to side.
             listOf(
-                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_SHUT, LEGS_REACH), -1),
-                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_TEETH, LEGS_PLANTED),
-                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_TEETH, LEGS_REACH), 1),
-                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_PLANTED),
+                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_SNARL), -1),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_FANGS),
+                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_FANGS), 1),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR),
             ),
         ),
     )
