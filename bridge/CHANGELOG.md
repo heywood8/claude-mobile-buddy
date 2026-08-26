@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.4.0...bridge-v0.5.0) (2026-08-26)
+
+
+### Features
+
+* **bridge:** install the bundle where launchd can keep finding it ([f13abe3](https://github.com/heywood8/claude-mobile-buddy/commit/f13abe3d1e7e3a89f89472b26a28c8ee3def770e))
+* **bridge:** name the bundle Claude Buddy (bridge) ([ebaf815](https://github.com/heywood8/claude-mobile-buddy/commit/ebaf815a95e18fb91b5e558647c8bd2dc4c834bf))
+
 ## [0.4.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.3.0...bridge-v0.4.0) (2026-08-25)
 
 

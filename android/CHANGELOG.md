@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.4.0...android-v0.5.0) (2026-08-26)
+
+
+### Features
+
+* **android:** forget a paired bridge from the phone ([ea74e30](https://github.com/heywood8/claude-mobile-buddy/commit/ea74e307a0571e30ca082c17a1cc656b2a5ec448))
+
 ## [0.4.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.3.0...android-v0.4.0) (2026-08-25)
 
 
