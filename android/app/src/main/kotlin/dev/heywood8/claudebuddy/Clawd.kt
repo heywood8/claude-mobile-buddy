@@ -263,11 +263,11 @@ object Clawd {
         listOf(shift("......K.......", by), shift("....KKKKK.....", by), dust)
 
     // The crest above the face, flickering like the flame it is.
-    private const val CREST_TALL = ".NN...CC...NN."
-    private const val CREST_LEAN = ".NN..CC....NN."
-    private const val CREST_LOW = ".NN...C....NN."
-    private const val BROW_WIDE = "..NN.CCCC.NN.."
-    private const val BROW_LEAN = "..NN.CCC..NN.."
+    private const val CREST_TALL = ".NNN..CC..NNN."
+    private const val CREST_LEAN = ".NNN..C...NNN."
+    private const val CREST_LOW = ".NNN......NNN."
+    private const val BROW_WIDE = "..NNN.CC.NNN.."
+    private const val BROW_LEAN = "..NNN.C..NNN.."
 
     private const val EYES_RED = "..PPYYPPYYPP.."
     private const val EYES_NARROW = "..PPPYPPYPPP.."
@@ -298,10 +298,10 @@ object Clawd {
      */
     private fun breaker(crest: String, brow: String, eyes: String, jaw: String, legs: String) =
         listOf(
-            "NN..........NN",
+            "NNN........NNN",
             crest,
             brow,
-            "...NNCCCCNN...",
+            "...NNNCCNNN...",
             "...PPPPPPPP...",
             eyes,
             "..PPPPPPPPPP..",
