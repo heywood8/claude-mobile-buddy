@@ -38,10 +38,17 @@ object Clawd {
     val DIRT = Color(0xFF6B4A34)
     val LEAF = Color(0xFF6E8B4F)
 
-    /** The thing it becomes when a shell command is on the table: hide, horn, and eyeshine. */
-    val SPIRIT = Color(0xFF3E3F73)
-    val BONE = Color(0xFFCFC7B8)
-    val GLOW = Color(0xFFF6D45A)
+    /**
+     * The thing it becomes when a shell command is on the table.
+     *
+     * Bright blue hide, cream horns that go out rather than up, and red eyes — not the dark
+     * navy and yellow the first attempt had, which read as a beetle. The fangs borrow [PAPER]
+     * and the mouth borrows [EYE]; at fourteen cells across, two more colours would only make
+     * the face muddier.
+     */
+    val SPIRIT = Color(0xFF2FA3DC)
+    val BONE = Color(0xFFE8DCA6)
+    val GLOW = Color(0xFFE03B2E)
 
     /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
@@ -249,22 +256,31 @@ object Clawd {
     private fun broom(by: Int, dust: String) =
         listOf(shift("......K.......", by), shift("....KKKKK.....", by), dust)
 
-    private const val HOOVES_A = ".NN......NN..."
-    private const val HOOVES_B = "..NN....NN...."
+    private const val HOOVES_A = "..NN....NN...."
+    private const val HOOVES_B = ".NN......NN..."
+
+    /** Bared, half open, and shut. Teeth are most of what makes the face read. */
+    private const val JAW_WIDE = ".PWEWEWEWEWEP."
+    private const val JAW_HALF = ".PWEEWEEWEEWP."
+    private const val JAW_SHUT = ".PEEEEEEEEEEP."
+
+    private const val EYES_RED = ".PYYPPPPPPYYP."
+    private const val EYES_NARROW = ".PPYPPPPPPYPP."
 
     /**
      * Not a crab at all.
      *
-     * Horns above, a hide where the shell was, eyes that shine rather than sit there. Same
-     * silhouette height as everything else so the row does not jump when it changes.
+     * Horns out to the sides rather than up, a bright hide where the shell was, red eyes and a
+     * mouthful of teeth. Same silhouette height as every other state, so the row does not jump
+     * when it changes.
      */
-    private fun breaker(horns: String, eyes: String, hooves: String) = listOf(
-        BLANK,
+    private fun breaker(horns: String, eyes: String, jaw: String, hooves: String) = listOf(
         horns,
+        ".NN........NN.",
         "..NPPPPPPPPN..",
-        ".PPPPPPPPPPPP.",
         eyes,
         ".PPPPPPPPPPPP.",
+        jaw,
         "..PPPPPPPPPP..",
         hooves,
         BLANK,
@@ -631,25 +647,26 @@ object Clawd {
         ),
         // Bash, breaker, horns. Three ways to be about to charge at something.
         PetState.BREAKER to listOf(
+            // Standing there, breathing at you.
             listOf(
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
-                breaker(".N..........N.", ".PPPPPPPPPPPP.", HOOVES_A),
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B),
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+                breaker("NN..........NN", EYES_RED, JAW_HALF, HOOVES_A),
+                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
+                breaker("NN..........NN", EYES_NARROW, JAW_HALF, HOOVES_B),
+                breaker("NN..........NN", EYES_RED, JAW_SHUT, HOOVES_A),
             ),
-            // Charging, with the dark trailing behind it.
+            // Winding up to charge.
             listOf(
-                swayed(breaker("NN.........N..", ".PYYPPPPPYYPP.", HOOVES_B), -1),
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
-                swayed(breaker("..N.........NN", ".PPYYPPPPPYYP.", HOOVES_B), 1),
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
+                swayed(breaker("NN..........NN", EYES_NARROW, JAW_SHUT, HOOVES_B), -1),
+                breaker("NN..........NN", EYES_RED, JAW_HALF, HOOVES_A),
+                swayed(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), 1),
+                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
             ),
             // Stamping, and the ground answering.
             listOf(
-                breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_A),
-                topped(breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B), "..D........D.."),
-                breaker(".N..........N.", ".PPPPPPPPPPPP.", HOOVES_A),
-                topped(breaker(".N..........N.", ".PPYYPPPPYYPP.", HOOVES_B), ".D..........D."),
+                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
+                topped(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), "..D........D.."),
+                breaker("NN..........NN", EYES_NARROW, JAW_SHUT, HOOVES_A),
+                topped(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), ".D..........D."),
             ),
         ),
     )
