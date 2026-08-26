@@ -57,6 +57,8 @@ actor Coordinator {
         var tokens: Int = 0
         /// The last thing you asked it for.
         var task: String = ""
+        /// When it last stopped answering. Zero while it is working.
+        var finished: Int = 0
     }
 
     private var queue: [Pending] = []
@@ -150,6 +152,10 @@ actor Coordinator {
     /// terminal produces no event of its own — the tool never runs — and would otherwise sit
     /// on the phone until the window ran out.
     func turnEnded(_ sessionID: String) {
+        if var session = sessions[sessionID] {
+            session.finished = Self.now()
+            sessions[sessionID] = session
+        }
         for pending in queue where pending.sessionID == sessionID {
             resolved = Resolution(id: pending.id, session: sessionID, how: "gone", at: Self.now())
             withdraw(pending.id, reason: "the turn ended without it")
@@ -171,6 +177,9 @@ actor Coordinator {
         let now = Self.now()
         if var session = sessions[id] {
             session.active = now
+            // Anything at all from a session means it is going again, and whatever it said
+            // last is no longer the thing it is waiting on you about.
+            session.finished = 0
             sessions[id] = session
         } else {
             // Logged once per session, so it is possible to tell "the hook never fired" from
@@ -370,6 +379,7 @@ actor Coordinator {
                         active: session.active,
                         decided: session.decided,
                         tokens: session.tokens,
+                        finished: session.finished,
                         task: session.task)
                 }
                 // Stable order, so the list on the phone does not reshuffle every keepalive.

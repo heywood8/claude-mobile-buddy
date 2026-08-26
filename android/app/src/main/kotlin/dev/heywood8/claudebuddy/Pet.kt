@@ -18,6 +18,12 @@ enum class PetState {
     /** A session did something recently. */
     BUSY,
 
+    /** It has answered and you have not come back to it yet. */
+    FINISHED,
+
+    /** The answer has been sitting there a while, and you have not replied. */
+    RESTING,
+
     /** Something is waiting for you right now. */
     ATTENTION,
 
@@ -34,6 +40,9 @@ object Pet {
 
     /** How recently a session must have done something to count as busy. */
     private const val BUSY_SECONDS = 45L
+
+    /** How long an answer counts as unread before the crab gives up waiting for you. */
+    private const val UNREAD_SECONDS = 180L
 
     /**
      * Tokens per level.
@@ -116,8 +125,23 @@ object Pet {
                 "denied" -> return PetState.DIZZY
             }
         }
+        // Working beats having finished: the stamp only clears on the next tool call, and a
+        // session that has started again is not waiting for you.
         val quiet = snapshot.now - session.active
-        return if (session.active > 0 && quiet < BUSY_SECONDS) PetState.BUSY else PetState.IDLE
+        if (session.active > 0 && quiet < BUSY_SECONDS && session.active >= session.finished) {
+            return PetState.BUSY
+        }
+
+        // Nothing reports that you have read anything, so "unread" is a guess made out loud:
+        // for the first few minutes after it stops, it is holding the answer up. After that it
+        // assumes you saw it and went to do something else, and sits down. Wrong sometimes,
+        // and this is a crab.
+        if (session.finished > 0) {
+            val since = snapshot.now - session.finished
+            return if (since < UNREAD_SECONDS) PetState.FINISHED else PetState.RESTING
+        }
+
+        return PetState.IDLE
     }
 
     /** What the pet is doing, in words, for the line under it. */
@@ -125,6 +149,8 @@ object Pet {
         PetState.SLEEP -> "asleep"
         PetState.IDLE -> "waiting around"
         PetState.BUSY -> "watching them work"
+        PetState.FINISHED -> "has something for you"
+        PetState.RESTING -> "waiting on you"
         PetState.ATTENTION -> "needs you"
         PetState.CELEBRATE -> "pleased"
         PetState.DIZZY -> "shaken"

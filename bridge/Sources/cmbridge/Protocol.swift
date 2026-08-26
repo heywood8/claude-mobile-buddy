@@ -49,6 +49,11 @@ struct SessionSummary: Codable, Equatable {
     /// be read, which is not distinguishable from a session that has used none — and does
     /// not need to be, for a number on a dashboard.
     var tokens: Int = 0
+    /// When it last finished answering, in the host's clock. Zero while it is working.
+    ///
+    /// Nothing reports that you have read the answer, so this is the closest thing available:
+    /// the moment it stopped talking. How long that counts as "unread" is the phone's guess.
+    var finished: Int = 0
     /// The last thing you asked this session for, trimmed to a glance. Empty until it has
     /// heard one — a session resumed mid-flight has been given nothing yet as far as the
     /// bridge knows, and inventing something would be worse than a blank line.

@@ -52,6 +52,13 @@ object Clawd {
         PetState.SLEEP -> 1500
         PetState.BUSY -> 200
         PetState.ATTENTION -> 280
+        PetState.FINISHED -> 260
+        // Slow on purpose. Everything else on this screen moves because something is
+        // happening; this one moves because nothing is.
+        PetState.RESTING -> when (frame % 4) {
+            2 -> 160
+            else -> 1300
+        }
         PetState.CELEBRATE -> FRAME_MILLIS
         PetState.DIZZY -> 160
     }
@@ -64,6 +71,8 @@ object Clawd {
         PetState.ATTENTION -> 2f
         PetState.CELEBRATE -> 3f
         PetState.DIZZY -> 1f
+        PetState.FINISHED -> 2f
+        PetState.RESTING -> 1f
     }
 
     /** One half of the bob, in milliseconds. */
@@ -74,6 +83,8 @@ object Clawd {
         PetState.ATTENTION -> 260
         PetState.CELEBRATE -> 180
         PetState.DIZZY -> 700
+        PetState.FINISHED -> 420
+        PetState.RESTING -> 3000
     }
 
     fun palette(symbol: Char): Color? = when (symbol) {
@@ -93,6 +104,14 @@ object Clawd {
     private const val EYES_LEFT = ".BEEBBBBBBEEB."
     private const val EYES_SHUT = ".BBBBBBBBBBBB."
     private const val EYES_HAPPY = ".BBBBBEEBBBBB."
+
+    /** Looking up at whatever it is holding over its head. */
+    private const val EYES_UP_TOP = ".BBEEBBBBEEBB."
+    private const val EYES_UP_LOW = ".BBBBBBBBBBBB."
+
+    /** Half shut, the way a thing that has been waiting a while looks. */
+    private const val EYES_HALF_TOP = ".BBBBBBBBBBBB."
+    private const val EYES_HALF_LOW = ".BBEEBBBBEEBB."
 
     // Four phases of a walk, and one of standing still.
     private const val STAND_A = ".L..L....L..L."
@@ -155,6 +174,37 @@ object Clawd {
                 "L............L", "LL.BBBBBBBB.LL",
                 ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
             ),
+            // One insistent shake of both claws at once.
+            raised(
+                "LL..........LL", "LL.BBBBBBBB.LL",
+                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_A, STEP_B,
+            ),
+        ),
+        // Holding the answer up, waiting for someone to take it.
+        PetState.FINISHED to listOf(
+            listOf(
+                "...LLLLLLLL...", TOP, WIDE,
+                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_A, STAND_B,
+            ),
+            listOf(
+                "..LLLLLLLL....", TOP, WIDE,
+                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_B, STAND_A,
+            ),
+            listOf(
+                "....LLLLLLLL..", TOP, WIDE,
+                EYES_UP_TOP, EYES_UP_LOW, WIDE, BOTTOM, STAND_A, STAND_B,
+            ),
+            listOf(
+                "...LLLLLLLL...", TOP, WIDE,
+                EYES_OPEN, EYES_OPEN, WIDE, BOTTOM, STEP_A, STEP_B,
+            ),
+        ),
+        // Sat down with it, legs tucked in.
+        PetState.RESTING to listOf(
+            listOf(BLANK, TOP, WIDE, EYES_HALF_TOP, EYES_HALF_LOW, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(BLANK, TOP, WIDE, EYES_OPEN, EYES_OPEN, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(BLANK, TOP, WIDE, EYES_SHUT, EYES_SHUT, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(BLANK, TOP, WIDE, EYES_LEFT, EYES_LEFT, WIDE, BOTTOM, TUCKED, BLANK),
         ),
         PetState.CELEBRATE to listOf(
             raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_A, STAND_B),

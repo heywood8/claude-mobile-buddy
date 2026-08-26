@@ -9,6 +9,20 @@ object Settings {
     private const val KEEP_SCREEN_ON = "keepScreenOn"
     private const val SHOULD_RUN = "shouldRun"
     private const val FULL_SCREEN = "fullScreen"
+    private const val PATH_DEPTH = "pathDepth"
+
+    /**
+     * How many trailing directories of a working directory to show.
+     *
+     * Two by default: `~/git/sec/scm` becomes `sec/scm`, which is what tells two sessions apart
+     * on a screen this narrow. The leading part is the same for every checkout you own and
+     * spends width saying so. Zero means the whole path.
+     */
+    fun pathDepth(context: Context): Int = prefs(context).getInt(PATH_DEPTH, 2)
+
+    fun setPathDepth(context: Context, depth: Int) {
+        prefs(context).edit().putInt(PATH_DEPTH, depth).apply()
+    }
 
     /**
      * Whether a pending approval raises a notification.

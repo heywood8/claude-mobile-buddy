@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -182,7 +183,10 @@ private fun PendingDecision(withButtons: Boolean) {
                 Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
                 Text(prompt.hint, style = MaterialTheme.typography.bodyMedium)
                 if (prompt.cwd.isNotEmpty()) {
-                    Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        shortPath(prompt.cwd, Settings.pathDepth(LocalContext.current)),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 if (withButtons) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,6 +254,7 @@ private fun Status() {
 private fun Sessions() {
     val snapshot = BuddyState.snapshot ?: return
     if (snapshot.sessions.isEmpty()) return
+    val depth = Settings.pathDepth(LocalContext.current)
 
     Text("Sessions", style = MaterialTheme.typography.titleSmall)
     for (session in snapshot.sessions) {
@@ -265,7 +270,7 @@ private fun Sessions() {
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    session.cwd.ifEmpty { session.id.take(8) },
+                    session.cwd.ifEmpty { session.id.take(8) }.let { shortPath(it, depth) },
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 // What you asked for, above what it has been doing about it. An hour later
@@ -295,6 +300,18 @@ private fun describe(session: SessionSummary, now: Long): String {
     }
     if (session.tokens > 0) parts += "${tokens(session.tokens)} tokens"
     return parts.joinToString(" · ")
+}
+
+/**
+ * The last [depth] directories of a path, or all of it when there are no more than that.
+ *
+ * Trimming a path that was already short would turn `~/work` into `work` and lose the one
+ * character saying where it is; there is nothing to gain and a tilde to lose.
+ */
+fun shortPath(path: String, depth: Int): String {
+    if (depth <= 0) return path
+    val parts = path.trimEnd('/').split('/').filter { it.isNotEmpty() && it != "~" }
+    return if (parts.size <= depth) path else parts.takeLast(depth).joinToString("/")
 }
 
 /** "just now" is already past tense; "just now ago" is not English. */
@@ -415,6 +432,32 @@ private fun Controls(
                     "A request wakes the display. What it wants to run stays behind the lock.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+        }
+    }
+
+    var depth by remember { mutableIntStateOf(Settings.pathDepth(context)) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Path", style = MaterialTheme.typography.bodyMedium)
+        // The leading half of a path is the same for every checkout you own and spends the
+        // width saying so. Zero is here for the rare case where it is not.
+        for (option in listOf(1, 2, 3, 0)) {
+            val label = if (option == 0) "all" else option.toString()
+            if (option == depth) {
+                Button(onClick = {}, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                    Text(label)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        depth = option
+                        Settings.setPathDepth(context, option)
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                ) { Text(label) }
             }
         }
     }

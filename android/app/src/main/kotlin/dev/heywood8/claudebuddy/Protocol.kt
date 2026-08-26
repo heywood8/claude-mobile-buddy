@@ -48,6 +48,13 @@ data class SessionSummary(
     val decided: Long = 0,
     /** Tokens the model has processed for it, as far as the transcript says. */
     val tokens: Long = 0,
+    /**
+     * When it last finished answering, in the host's clock. Zero while it is working.
+     *
+     * Nothing reports that you have read anything, so this is the closest signal there is:
+     * the moment it stopped talking.
+     */
+    val finished: Long = 0,
     /** The last thing you asked it for, trimmed to a glance by the bridge. */
     val task: String = "",
 )
