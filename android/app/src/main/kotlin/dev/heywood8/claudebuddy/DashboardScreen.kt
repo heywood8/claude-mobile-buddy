@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,7 +74,6 @@ fun DashboardScreen(
                     PetView()
                     Status()
                     Sessions()
-                    RecentCalls()
                 }
                 Column(
                     Modifier.width(320.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
@@ -91,8 +91,8 @@ fun DashboardScreen(
                 PetView()
                 Status()
                 Sessions()
+                Spacer(Modifier.height(4.dp))
                 Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
-                RecentCalls()
             }
         }
     }
@@ -265,14 +265,6 @@ private fun elapsed(seconds: Long): String = when {
     seconds < 60 -> "under a minute"
     seconds < 3600 -> "${seconds / 60}m"
     else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
-}
-
-@Composable
-private fun RecentCalls() {
-    val entries = BuddyState.snapshot?.entries.orEmpty()
-    for (entry in entries) {
-        Text(entry, style = MaterialTheme.typography.bodySmall)
-    }
 }
 
 @Composable

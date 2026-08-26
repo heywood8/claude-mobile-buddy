@@ -40,16 +40,28 @@ fun HistoryScreen(
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onBack) { Text("Back") }
+            OutlinedButton(onClick = onExport, enabled = entries.isNotEmpty()) { Text("Export") }
+        }
+
+        // Live, and nothing to do with the record below: this is what the sessions are doing
+        // right now, and it answers "is anything happening". On the dashboard it was a
+        // scrolling wall under the one thing you actually go there for.
+        val calls = BuddyState.snapshot?.entries.orEmpty()
+        if (calls.isNotEmpty()) {
+            Text("Recent calls", style = MaterialTheme.typography.titleMedium)
+            for (call in calls.take(RECENT_CALLS)) {
+                Text(call, style = MaterialTheme.typography.bodySmall)
+            }
+            HorizontalDivider()
+        }
+
         Text("Decisions", style = MaterialTheme.typography.titleMedium)
         Text(
             "Kept for ${Journal.RETENTION_DAYS} days, on this device only.",
             style = MaterialTheme.typography.bodySmall,
         )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack) { Text("Back") }
-            OutlinedButton(onClick = onExport, enabled = entries.isNotEmpty()) { Text("Export") }
-        }
 
         if (entries.isEmpty()) {
             Text("Nothing recorded yet.", style = MaterialTheme.typography.bodyMedium)
@@ -84,3 +96,5 @@ private fun label(entry: Journal.Entry): String = when (entry.outcome) {
 
 private fun stamp(seconds: Long): String =
     SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()).format(Date(seconds * 1000))
+
+private const val RECENT_CALLS = 10
