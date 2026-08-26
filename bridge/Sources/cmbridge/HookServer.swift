@@ -129,6 +129,8 @@ private final class HookHandler: ChannelInboundHandler {
                 log.error("unparseable PermissionRequest payload")
                 return HookResponse.noDecision.jsonData
             }
+            await coordinator.noteTranscript(
+                sessionID: request.sessionID, path: request.transcriptPath)
             return await coordinator.decide(request).jsonData
 
         case "/session-start":
@@ -139,12 +141,20 @@ private final class HookHandler: ChannelInboundHandler {
 
         case "/session-end":
             if let request = HookRequest(body: payload) {
+                // Last look before the session goes: whatever it wrote after its final tool
+                // call would otherwise never be counted.
+                await coordinator.noteTranscript(
+                    sessionID: request.sessionID, path: request.transcriptPath)
                 await coordinator.sessionEnded(request.sessionID)
             }
             return Data("{}".utf8)
 
         case "/tool-use":
             if let request = HookRequest(body: payload) {
+                // The usual cadence: this fires after every tool call, which is exactly when
+                // the transcript has grown.
+                await coordinator.noteTranscript(
+                    sessionID: request.sessionID, path: request.transcriptPath)
                 await coordinator.recordToolUse(
                     sessionID: request.sessionID,
                     cwd: request.cwd,

@@ -45,6 +45,10 @@ struct SessionSummary: Codable, Equatable {
     let active: Int
     /// Last time you decided something for it. Zero if you never have.
     let decided: Int
+    /// Tokens the model has processed for this session. Zero when the transcript could not
+    /// be read, which is not distinguishable from a session that has used none — and does
+    /// not need to be, for a number on a dashboard.
+    var tokens: Int = 0
 }
 
 /// Complete state, not a delta. Sent on change and as a keepalive.
@@ -60,8 +64,17 @@ struct Snapshot: Codable, Equatable {
     var now: Int = 0
     /// Defaulted so a snapshot written before this field existed still decodes.
     var sessions: [SessionSummary] = []
+    /// Tokens across every session the bridge knows about, and since local midnight.
+    /// Field names follow the maker specification.
+    var tokens: Int = 0
+    var tokensToday: Int = 0
 
     static let keepalive: TimeInterval = 10
+
+    enum CodingKeys: String, CodingKey {
+        case t, total, running, waiting, msg, entries, prompt, now, sessions, tokens
+        case tokensToday = "tokens_today"
+    }
 }
 
 /// The phone's answer. Field names follow Anthropic's maker specification.

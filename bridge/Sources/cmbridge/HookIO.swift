@@ -12,6 +12,9 @@ struct HookRequest {
     let cwd: String
     /// Best-effort one-line summary of what the tool is about to do.
     let hint: String
+    /// Where Claude Code is writing this session's transcript. Empty when the event does not
+    /// carry it, which is not an error — the token count simply does not move.
+    let transcriptPath: String
 
     init?(body: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
@@ -22,6 +25,7 @@ struct HookRequest {
         toolName = (obj["tool_name"] as? String) ?? "unknown"
         cwd = Self.abbreviateHome((obj["cwd"] as? String) ?? "")
         hint = Self.summarise(tool: toolName, input: obj["tool_input"] as? [String: Any])
+        transcriptPath = (obj["transcript_path"] as? String) ?? ""
     }
 
     private static func abbreviateHome(_ path: String) -> String {

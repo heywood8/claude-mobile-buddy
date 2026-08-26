@@ -53,11 +53,23 @@ actor Coordinator {
         let started: Int
         var active: Int
         var decided: Int
+        /// Tokens the model has processed for this session, as far as its transcript says.
+        var tokens: Int = 0
     }
 
     private var queue: [Pending] = []
     private var entries: [String] = []
     private var sessions: [String: Session] = [:]
+    private var transcripts = TranscriptReader()
+
+    /// Tokens counted since midnight, across every session.
+    ///
+    /// "Counted", not "written": the day a token belongs to is the day the bridge read it,
+    /// which differs from the truth only for a session left running across midnight with the
+    /// bridge asleep. Reading the timestamps out of the transcript to do better would mean
+    /// trusting one more field of a format that carries no guarantees.
+    private var tokensToday = 0
+    private var tokensDay = Coordinator.dayKey()
 
     init(
         link: any LinkSink,
@@ -108,6 +120,33 @@ actor Coordinator {
     }
 
     private static func now() -> Int { Int(Date().timeIntervalSince1970) }
+
+    private static func dayKey() -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.ordinality(of: .day, in: .era, for: Date()) ?? 0
+    }
+
+    /// Counts whatever the transcript has gained since the last hook from this session.
+    ///
+    /// Called from the hook path rather than on a timer: the file only moves when the session
+    /// does, and every hook that reaches us names the transcript it came from.
+    func noteTranscript(sessionID: String, path: String) {
+        let delta = transcripts.delta(path: path)
+        guard delta > 0 else { return }
+
+        let today = Self.dayKey()
+        if today != tokensDay {
+            tokensDay = today
+            tokensToday = 0
+        }
+        tokensToday += delta
+
+        if var session = sessions[sessionID] {
+            session.tokens += delta
+            sessions[sessionID] = session
+        }
+    }
 
     // MARK: - Approvals
 
@@ -259,10 +298,13 @@ actor Coordinator {
                         cwd: session.cwd,
                         started: session.started,
                         active: session.active,
-                        decided: session.decided)
+                        decided: session.decided,
+                        tokens: session.tokens)
                 }
                 // Stable order, so the list on the phone does not reshuffle every keepalive.
-                .sorted { $0.started < $1.started })
+                .sorted { $0.started < $1.started },
+            tokens: sessions.values.reduce(0) { $0 + $1.tokens },
+            tokensToday: tokensToday)
         guard let data = try? LineCodec.encode(snapshot) else { return }
         link.send(data)
     }

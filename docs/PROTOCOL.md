@@ -196,16 +196,31 @@ has been since you last had a say in it.
 
 ```json
 "now": 1775731300,
+"tokens": 4820000,
+"tokens_today": 1240000,
 "sessions": [
   {
     "id": "abc123",
     "cwd": "~/git/github/claude-mobile-buddy",
     "started": 1775729000,
     "active": 1775731280,
-    "decided": 1775731100
+    "decided": 1775731100,
+    "tokens": 980000
   }
 ]
 ```
+
+`tokens` and `tokens_today` are named as in the reference schema, but nothing in the hook
+payloads carries them: the bridge reads them out of the session's `transcript_path`, counting
+only what has been appended since it last looked. Every field of a usage record is added
+together — input, output, cache creation, cache read — which is what the model processed, not
+what it cost; the four are priced differently and a phone screen is no place to imply
+otherwise. `tokens_today` counts from local midnight on the **host**, by the day the bridge
+read the line rather than the day the line claims.
+
+A transcript that cannot be read leaves every one of these at zero. The format belongs to
+Claude Code and carries no stability guarantee, so this is the one part of the snapshot that
+is allowed to be silently wrong rather than to fail.
 
 All three stamps are absolute seconds in the **host's** clock, and `now` is the host's clock at
 the moment the snapshot was built. The phone works out durations by subtracting one from the

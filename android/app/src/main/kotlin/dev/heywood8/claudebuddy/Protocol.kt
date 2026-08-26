@@ -46,6 +46,8 @@ data class SessionSummary(
     val active: Long = 0,
     /** Last time you decided something for it. Zero if you never have. */
     val decided: Long = 0,
+    /** Tokens the model has processed for it, as far as the transcript says. */
+    val tokens: Long = 0,
 )
 
 /** Complete state, not a delta. */
@@ -62,6 +64,11 @@ data class Snapshot(
     val now: Long = 0,
     /** Defaulted, so a snapshot from a bridge without this field still decodes. */
     val sessions: List<SessionSummary> = emptyList(),
+    /** Across every session the bridge knows about. */
+    val tokens: Long = 0,
+    /** Since local midnight on the host. */
+    @SerialName("tokens_today")
+    val tokensToday: Long = 0,
 )
 
 @Serializable

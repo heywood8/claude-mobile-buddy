@@ -124,10 +124,13 @@ private fun Status() {
         style = MaterialTheme.typography.titleMedium,
     )
     if (snapshot != null) {
-        Text(
-            "${snapshot.running} running · ${snapshot.waiting} waiting",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        val line = buildString {
+            append("${snapshot.running} running · ${snapshot.waiting} waiting")
+            // Absent rather than zero when the transcript could not be read: a confident
+            // "0 tokens" next to a working session would be a lie about the wrong thing.
+            if (snapshot.tokensToday > 0) append(" · ${tokens(snapshot.tokensToday)} today")
+        }
+        Text(line, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -162,12 +165,20 @@ private fun describe(session: SessionSummary, now: Long): String {
     } else {
         "you have not stepped in"
     }
+    if (session.tokens > 0) parts += "${tokens(session.tokens)} tokens"
     return parts.joinToString(" · ")
 }
 
 /** "just now" is already past tense; "just now ago" is not English. */
 private fun ago(label: String, seconds: Long): String =
     if (seconds < 60) "$label just now" else "$label ${elapsed(seconds)} ago"
+
+/** Two significant figures is all a glance can use, and all the number deserves. */
+private fun tokens(count: Long): String = when {
+    count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
+    count >= 1_000 -> "${count / 1_000}k"
+    else -> count.toString()
+}
 
 private fun elapsed(seconds: Long): String = when {
     seconds < 60 -> "under a minute"
