@@ -50,6 +50,10 @@ object Clawd {
     val BONE = Color(0xFFE8DCA6)
     val GLOW = Color(0xFFE03B2E)
 
+    /** The pale crest above the face, and the gold of the teeth and the nose ring. */
+    val CREST = Color(0xFF8FD4F2)
+    val GOLD = Color(0xFFE8B93A)
+
     /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
 
@@ -134,6 +138,8 @@ object Clawd {
         'P' -> SPIRIT
         'N' -> BONE
         'Y' -> GLOW
+        'C' -> CREST
+        'A' -> GOLD
         'F' -> FLAME
         'D' -> DIRT
         'G' -> LEAF
@@ -256,35 +262,46 @@ object Clawd {
     private fun broom(by: Int, dust: String) =
         listOf(shift("......K.......", by), shift("....KKKKK.....", by), dust)
 
-    private const val HOOVES_A = "..NN....NN...."
-    private const val HOOVES_B = ".NN......NN..."
+    // The crest above the face, flickering like the flame it is.
+    private const val CREST_TALL = ".NN...CC...NN."
+    private const val CREST_LEAN = ".NN..CC....NN."
+    private const val CREST_LOW = ".NN...C....NN."
+    private const val BROW_WIDE = "..NN.CCCC.NN.."
+    private const val BROW_LEAN = "..NN.CCC..NN.."
 
-    /** Bared, half open, and shut. Teeth are most of what makes the face read. */
-    private const val JAW_WIDE = ".PWEWEWEWEWEP."
-    private const val JAW_HALF = ".PWEEWEEWEEWP."
-    private const val JAW_SHUT = ".PEEEEEEEEEEP."
+    private const val EYES_RED = ".PPYYPPPPYYPP."
+    private const val EYES_NARROW = ".PPPYPPPPYPPP."
 
-    private const val EYES_RED = ".PYYPPPPPPYYP."
-    private const val EYES_NARROW = ".PPYPPPPPPYPP."
+    /** Shut, bared, and open on a roar. Gold, because that is what he has instead of a smile. */
+    private const val JAW_SHUT = ".PPAAAAAAAAPP."
+    private const val JAW_TEETH = ".PAAAAAAAAAAP."
+    private const val JAW_ROAR = ".PEAEAEAEAEEP."
+
+    /** Four of them, because he runs on four. Three phases of a gallop. */
+    private const val LEGS_PLANTED = ".PP.PP..PP.PP."
+    private const val LEGS_REACH = "PP..PP..PP..PP"
+    private const val LEGS_GATHER = "..PP.PP.PP.PP."
 
     /**
-     * Not a crab at all.
+     * Not a crab at all: a head, and everything that hangs off it.
      *
-     * Horns out to the sides rather than up, a bright hide where the shell was, red eyes and a
-     * mouthful of teeth. Same silhouette height as every other state, so the row does not jump
-     * when it changes.
+     * Horns sweep out from the temples rather than standing up, a crest burns between them,
+     * the eyes are narrow and red, and the mouth is gold — teeth, and a ring through the nose.
+     * Underneath, shoulders and four legs: he charges on all fours, and two would make him a
+     * different animal.
      */
-    private fun breaker(horns: String, eyes: String, jaw: String, hooves: String) = listOf(
-        horns,
-        ".NN........NN.",
-        "..NPPPPPPPPN..",
-        eyes,
-        ".PPPPPPPPPPPP.",
-        jaw,
-        "..PPPPPPPPPP..",
-        hooves,
-        BLANK,
-    )
+    private fun breaker(crest: String, brow: String, eyes: String, jaw: String, legs: String) =
+        listOf(
+            "NN..........NN",
+            crest,
+            brow,
+            "..PPPPPPPPPP..",
+            eyes,
+            ".PPPPPAAPPPPP.",
+            jaw,
+            "..PPPPPPPPPP..",
+            legs,
+        )
 
     /** Holding something up over its head — the page, mostly. */
     private fun holding(sheet: String, face: String, faceLower: String) = listOf(
@@ -647,26 +664,26 @@ object Clawd {
         ),
         // Bash, breaker, horns. Three ways to be about to charge at something.
         PetState.BREAKER to listOf(
-            // Standing there, breathing at you.
+            // Staring you down while the crest burns.
             listOf(
-                breaker("NN..........NN", EYES_RED, JAW_HALF, HOOVES_A),
-                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
-                breaker("NN..........NN", EYES_NARROW, JAW_HALF, HOOVES_B),
-                breaker("NN..........NN", EYES_RED, JAW_SHUT, HOOVES_A),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_TEETH, LEGS_PLANTED),
+                breaker(CREST_LEAN, BROW_LEAN, EYES_RED, JAW_SHUT, LEGS_REACH),
+                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_TEETH, LEGS_PLANTED),
+                breaker(CREST_LOW, BROW_LEAN, EYES_RED, JAW_TEETH, LEGS_GATHER),
             ),
-            // Winding up to charge.
+            // Roaring.
             listOf(
-                swayed(breaker("NN..........NN", EYES_NARROW, JAW_SHUT, HOOVES_B), -1),
-                breaker("NN..........NN", EYES_RED, JAW_HALF, HOOVES_A),
-                swayed(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), 1),
-                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
+                breaker(CREST_TALL, BROW_WIDE, EYES_NARROW, JAW_ROAR, LEGS_REACH),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_PLANTED),
+                breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_TEETH, LEGS_GATHER),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_REACH),
             ),
-            // Stamping, and the ground answering.
+            // Winding up, side to side.
             listOf(
-                breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_A),
-                topped(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), "..D........D.."),
-                breaker("NN..........NN", EYES_NARROW, JAW_SHUT, HOOVES_A),
-                topped(breaker("NN..........NN", EYES_RED, JAW_WIDE, HOOVES_B), ".D..........D."),
+                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_SHUT, LEGS_REACH), -1),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_TEETH, LEGS_PLANTED),
+                swayed(breaker(CREST_LEAN, BROW_LEAN, EYES_NARROW, JAW_TEETH, LEGS_REACH), 1),
+                breaker(CREST_TALL, BROW_WIDE, EYES_RED, JAW_ROAR, LEGS_PLANTED),
             ),
         ),
     )
