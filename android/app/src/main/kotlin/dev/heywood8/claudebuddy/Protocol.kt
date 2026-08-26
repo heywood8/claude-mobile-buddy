@@ -87,7 +87,10 @@ data class Snapshot(
     val waiting: Int = 0,
     val msg: String = "",
     val entries: List<String> = emptyList(),
+    /** The head of the queue: what the notification is about. */
     val prompt: Prompt? = null,
+    /** Everything queued behind it. The head is not repeated here. */
+    val prompts: List<Prompt> = emptyList(),
     /** The host's clock when this was built. */
     val now: Long = 0,
     /** Defaulted, so a snapshot from a bridge without this field still decodes. */
@@ -99,7 +102,16 @@ data class Snapshot(
     val tokensToday: Long = 0,
     /** The last decision taken anywhere but here. */
     val resolved: Resolution? = null,
-)
+) {
+    /**
+     * Everything waiting, head first.
+     *
+     * The wire keeps the head apart because the notification is about that one; on screen the
+     * distinction does not exist, since each request is drawn beside the session that raised
+     * it and there is no queue to be at the front of.
+     */
+    val pending: List<Prompt> get() = if (prompt == null) prompts else listOf(prompt) + prompts
+}
 
 @Serializable
 enum class Verdict {

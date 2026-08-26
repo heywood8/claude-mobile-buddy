@@ -69,14 +69,25 @@ object BuddyState {
         onForegroundChange?.invoke()
     }
 
-    fun answer(id: String, verdict: Verdict, source: String) {
+    fun answer(id: String, verdict: Verdict, source: String, session: String = "") {
         sink?.invoke(Decision(id = id, decision = verdict), source)
         val at = System.currentTimeMillis() / 1000
-        main.post { lastAnswer = Answer(id, verdict, at) }
+        main.post { lastAnswer = Answer(id, session, verdict, at) }
     }
 
-    /** Your last decision, so the pet can react to it. Timed by this phone's clock. */
-    data class Answer(val id: String, val verdict: Verdict, val at: Long)
+    /**
+     * Your last decision, so the crab that asked can react to it.
+     *
+     * Timed by this phone's clock, and carrying the session because the request it belonged to
+     * is gone from the next snapshot — answering it is what removed it. The session is empty
+     * when the answer came from the notification, which knows an id and nothing else.
+     */
+    data class Answer(
+        val id: String,
+        val session: String,
+        val verdict: Verdict,
+        val at: Long,
+    )
 
     /**
      * Drops the live link if it belongs to [hostId]. Removing the keyring entry is the

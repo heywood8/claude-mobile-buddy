@@ -107,7 +107,12 @@ struct Snapshot: Codable, Equatable {
     var waiting: Int
     var msg: String
     var entries: [String]
+    /// The head of the queue: what the notification is about, and what a single pair of
+    /// buttons answers.
     var prompt: Prompt?
+    /// Everything queued behind the head, and nothing else — the head is not repeated here.
+    /// Two fields rather than one array because the head has a job the others do not.
+    var prompts: [Prompt] = []
     /// The host's clock at the moment this was built.
     var now: Int = 0
     /// Defaulted so a snapshot written before this field existed still decodes.
@@ -122,7 +127,8 @@ struct Snapshot: Codable, Equatable {
     static let keepalive: TimeInterval = 10
 
     enum CodingKeys: String, CodingKey {
-        case t, total, running, waiting, msg, entries, prompt, now, sessions, tokens, resolved
+        case t, total, running, waiting, msg, entries, prompt, prompts, now, sessions
+        case tokens, resolved
         case tokensToday = "tokens_today"
     }
 }

@@ -30,6 +30,9 @@ object Clawd {
     val SCREEN = Color(0xFF2B3440)
     val CHASSIS = Color(0xFF9AA1A8)
 
+    /** Warmer and redder than the shell, so it is a heart and not a lump of crab. */
+    val HEART = Color(0xFFE0574A)
+
     /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
 
@@ -68,6 +71,7 @@ object Clawd {
         }
         PetState.CELEBRATE -> FRAME_MILLIS
         PetState.DIZZY -> 160
+        PetState.HEART -> 260
     }
 
     /** How far the whole sprite rises, in cells. Whole numbers only — see the renderer. */
@@ -79,6 +83,7 @@ object Clawd {
         PetState.ATTENTION -> 2f
         PetState.CELEBRATE -> 3f
         PetState.DIZZY -> 1f
+        PetState.HEART -> 1f
         // Nothing. He is standing still and waving the page; a hop underneath it would put
         // the whole animal back in motion, which is the thing that read as walking.
         PetState.FINISHED -> 0f
@@ -93,6 +98,7 @@ object Clawd {
         PetState.ATTENTION -> 260
         PetState.CELEBRATE -> 180
         PetState.DIZZY -> 700
+        PetState.HEART -> 900
         PetState.FINISHED -> 420
         PetState.RESTING -> 3000
     }
@@ -104,6 +110,7 @@ object Clawd {
         'W' -> PAPER
         'S' -> SCREEN
         'K' -> CHASSIS
+        'H' -> HEART
         else -> null
     }
 
@@ -259,6 +266,25 @@ object Clawd {
             raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
             raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_B, STAND_A),
             raised("..L........L..", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
+        ),
+        // A heart, rising. Four frames of it and then whatever it was doing before.
+        PetState.HEART to listOf(
+            listOf(
+                BLANK, "..H.H.........", TOP,
+                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+            ),
+            listOf(
+                "..H.H.........", "..HHH.........", TOP,
+                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+            ),
+            listOf(
+                "...H..........", "..H.H.........", TOP,
+                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+            ),
+            listOf(
+                BLANK, "...H..........", TOP,
+                WIDE, EYES_HAPPY, EYES_HAPPY, WIDE, BOTTOM, PLANTED,
+            ),
         ),
         PetState.DIZZY to listOf(
             body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_C, STEP_D),

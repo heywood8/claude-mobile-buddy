@@ -244,6 +244,7 @@ otherwise never hear about the sessions already running.
 | `msg` | short status line |
 | `entries` | recent tool calls, from `PostToolUse`, host-formatted with the host's clock |
 | `prompt` | head of the approval queue, absent when the queue is empty |
+| `prompts` | everything queued behind the head, and nothing else — the head is not repeated |
 
 `prompt.expires` is an extension over the reference schema: it is the wall-clock second at which
 the bridge will give up and fail open, so the phone can render a countdown rather than a
@@ -280,7 +281,11 @@ Sent by either side before disconnecting. Reasons: `unknown_host`, `busy`, `vers
 
 ## Queue and timing
 
-- One approval is on screen at a time. Others queue behind it; `waiting` carries the depth.
+- Every waiting approval is named: the head in `prompt`, the rest in `prompts`. Each one
+  carries the session that raised it, and the phone draws it beside that session rather than
+  as a queue — several at once is several conversations, not a stack of cards. `waiting` still
+  carries the depth. The head is distinguished only because the notification is about it, and
+  because a single pair of buttons can answer only one request.
 - Each request's window starts when the bridge receives it, not when it reaches the head of the
   queue. Total latency is therefore bounded regardless of queue depth. The window defaults to
   half an hour — the approval is meant to survive you being in a meeting — and is set with

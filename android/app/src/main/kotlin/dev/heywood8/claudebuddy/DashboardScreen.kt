@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -67,7 +68,13 @@ fun DashboardScreen(
     onAwakeChange: (Boolean) -> Unit,
 ) {
     var settingsOpen by remember { mutableStateOf(false) }
-    val prompt = BuddyState.snapshot?.prompt
+    // One pair of buttons can only answer one request. With several waiting they belong beside
+    // the crabs asking, where it is obvious which is which.
+    val pending = BuddyState.snapshot?.pending.orEmpty()
+    val alone = pending.singleOrNull()
+
+    HandlingEffects()
+    LevelUpEffect()
 
     BoxWithConstraints(modifier) {
         // A width breakpoint rather than an orientation check: what matters is whether there
@@ -83,7 +90,7 @@ fun DashboardScreen(
                         Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Sessions(withButtons = false)
+                        Sessions(withButtons = alone == null)
                     }
                     Status()
                 }
@@ -94,21 +101,26 @@ fun DashboardScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         MenuButton { settingsOpen = true }
                     }
-                    if (prompt != null) {
+                    if (alone != null) {
                         // The whole reason for the rail. On a phone lying on a desk you answer
                         // this without picking it up, and a 40dp button asks you to aim.
                         Button(
                             onClick = {
-                                BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                                BuddyState.answer(alone.id, Verdict.ONCE, BuddyState.Source.APP, alone.session)
                             },
                             modifier = Modifier.fillMaxWidth().height(104.dp),
                         ) { Text("Allow", style = MaterialTheme.typography.headlineSmall) }
                         OutlinedButton(
                             onClick = {
-                                BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                                BuddyState.answer(alone.id, Verdict.DENY, BuddyState.Source.APP, alone.session)
                             },
                             modifier = Modifier.fillMaxWidth().height(104.dp),
                         ) { Text("Deny", style = MaterialTheme.typography.headlineSmall) }
+                    } else if (pending.size > 1) {
+                        Text(
+                            "${pending.size} waiting — answer each one beside its crab.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             }
@@ -144,6 +156,26 @@ fun DashboardScreen(
                     onAwakeChange = onAwakeChange,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Every crab celebrates when the level goes up.
+ *
+ * The level is remembered across restarts, so reopening the app is not a party. It only ever
+ * moves forward here: a bridge restarted mid-day reports fewer tokens than it did an hour ago
+ * — the count is per transcript and per session — and a level that fell would celebrate its
+ * way back up the same ground tomorrow.
+ */
+@Composable
+private fun LevelUpEffect() {
+    val context = LocalContext.current
+    val level = Pet.level(BuddyState.snapshot?.tokens ?: 0)
+    LaunchedEffect(level) {
+        if (level > Settings.lastLevel(context)) {
+            Settings.setLastLevel(context, level)
+            PetMood.show(PetState.CELEBRATE, 5)
         }
     }
 }
@@ -217,20 +249,37 @@ private fun Status() {
 private fun Sessions(withButtons: Boolean) {
     val snapshot = BuddyState.snapshot ?: return
     val depth = Settings.pathDepth(LocalContext.current)
-    val prompt = snapshot.prompt
+    val pending = snapshot.pending
+
+    // A tick so moods expire on their own. The bridge speaks every ten seconds; a heart lasts
+    // four, and waiting for the next snapshot to take it away would be most of its life.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            tick++
+        }
+    }
+    val phoneNow = System.currentTimeMillis() / 1000
 
     for (session in snapshot.sessions) {
-        val asking = prompt?.takeIf { it.session == session.id }
+        val asking = pending.firstOrNull { it.session == session.id }
         Row(
             Modifier.fillMaxWidth().padding(bottom = 10.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ClawdView(
-                state = Pet.sessionState(session, snapshot),
+                // A tap outranks the bridge for a few seconds. Nothing depends on it, which
+                // is the point — this is the one thing on the screen that is just a pet.
+                state = PetMood.forSession(session.id, phoneNow)
+                    ?: Pet.sessionState(session, snapshot, BuddyState.lastAnswer, phoneNow),
                 // Fourteen cells across a smaller box put the laptop below one device pixel a
                 // cell, where it stopped being a laptop.
-                modifier = Modifier.width(84.dp).height(68.dp),
+                modifier = Modifier
+                    .width(84.dp)
+                    .height(68.dp)
+                    .clickable { PetMood.show(PetState.HEART, 4, session.id) },
                 phase = session.id.hashCode(),
             )
             Column(Modifier.weight(1f)) {
@@ -257,17 +306,17 @@ private fun Sessions(withButtons: Boolean) {
         }
     }
 
-    // A request whose session the bridge never told us about — a session that started before
-    // the bridge did, and has not called a tool since. Rare, and it must not swallow the one
-    // thing on this screen that cannot wait.
-    if (prompt != null && snapshot.sessions.none { it.id == prompt.session }) {
+    // Requests whose sessions the bridge never told us about — sessions that started before it
+    // did and have not called a tool since. Rare, and they must not swallow the one thing on
+    // this screen that cannot wait.
+    for (orphan in pending.filter { orphan -> snapshot.sessions.none { it.id == orphan.session } }) {
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.fillMaxWidth().padding(bottom = 10.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ClawdView(PetState.ATTENTION, Modifier.width(84.dp).height(68.dp))
-            Column(Modifier.weight(1f)) { Bubble(prompt, withButtons) }
+            Column(Modifier.weight(1f)) { Bubble(orphan, withButtons) }
         }
     }
 }
@@ -294,10 +343,10 @@ private fun Bubble(prompt: Prompt, withButtons: Boolean) {
                 if (withButtons) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP, prompt.session)
                         }) { Text("Allow") }
                         OutlinedButton(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP, prompt.session)
                         }) { Text("Deny") }
                     }
                 }

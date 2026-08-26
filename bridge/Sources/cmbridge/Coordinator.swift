@@ -406,6 +406,10 @@ actor Coordinator {
             msg: head.map { "approve: \($0.prompt.tool)" } ?? "idle",
             entries: entries,
             prompt: head?.prompt,
+            // The rest of the queue by name, not just as a count. Each one belongs to a
+            // session the phone already draws, so several at once is several crabs asking
+            // rather than a number nobody can act on.
+            prompts: queue.dropFirst().map(\.prompt),
             now: Self.now(),
             sessions: sessions
                 .map { id, session in

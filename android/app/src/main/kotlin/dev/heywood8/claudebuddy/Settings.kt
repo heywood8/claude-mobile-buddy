@@ -10,6 +10,14 @@ object Settings {
     private const val SHOULD_RUN = "shouldRun"
     private const val FULL_SCREEN = "fullScreen"
     private const val PATH_DEPTH = "pathDepth"
+    private const val LAST_LEVEL = "lastLevel"
+
+    /** The highest level already celebrated, so opening the app is not a party. */
+    fun lastLevel(context: Context): Int = prefs(context).getInt(LAST_LEVEL, 0)
+
+    fun setLastLevel(context: Context, level: Int) {
+        prefs(context).edit().putInt(LAST_LEVEL, level).apply()
+    }
 
     /**
      * How many trailing directories of a working directory to show.

@@ -1,5 +1,7 @@
 package dev.heywood8.claudebuddy
 
+import androidx.compose.runtime.mutableStateOf
+
 /**
  * The part of the app that has no job.
  *
@@ -32,6 +34,32 @@ enum class PetState {
 
     /** You just denied something. */
     DIZZY,
+
+    /** You touched it. It has no other purpose and does not need one. */
+    HEART,
+}
+
+/**
+ * A mood that overrides what the bridge says, briefly.
+ *
+ * Everything else on this screen is derived from state the host reports. These three are not:
+ * a tap, a shake and the phone being turned face down happen here and are gone in seconds.
+ * Kept apart from [Pet] for exactly that reason — one is a rendering of somebody else's truth,
+ * the other is this device reacting to being handled.
+ */
+object PetMood {
+    /** The mood, who it is for — empty means everyone — and when it lapses. */
+    private data class Mood(val state: PetState, val session: String, val until: Long)
+
+    private val current = mutableStateOf<Mood?>(null)
+
+    fun show(state: PetState, seconds: Long, session: String = "") {
+        current.value = Mood(state, session, System.currentTimeMillis() / 1000 + seconds)
+    }
+
+    fun forSession(id: String, now: Long): PetState? = current.value
+        ?.takeIf { now < it.until && (it.session.isEmpty() || it.session == id) }
+        ?.state
 }
 
 object Pet {
@@ -56,65 +84,38 @@ object Pet {
     fun level(tokens: Long): Int = (tokens / TOKENS_PER_LEVEL).toInt()
 
     /**
-     * What the pet should be doing, given what the bridge last said.
+     * The mood of one session's own crab.
      *
-     * Order matters more than the states do: a waiting decision outranks everything else on
-     * the screen, and your own last tap outranks the ambient state, so that pressing a button
-     * is visibly acknowledged.
+     * Order matters more than the states do. A request outranks everything else on the screen;
+     * a decision just taken outranks the ambient state, so that answering is acknowledged; and
+     * working outranks having finished, since a session that started again is not waiting.
      */
-    fun state(
-        running: Boolean,
-        linked: Boolean,
-        snapshot: Snapshot?,
+    fun sessionState(
+        session: SessionSummary,
+        snapshot: Snapshot,
         lastAnswer: BuddyState.Answer?,
-        /** This phone's clock. Deliberately not the host's — see below. */
+        /** This phone's clock, for the one stamp that was made here. */
         phoneNow: Long,
     ): PetState {
-        if (!running || !linked || snapshot == null) return PetState.SLEEP
-        if (snapshot.prompt != null) return PetState.ATTENTION
+        if (snapshot.pending.any { it.session == session.id }) return PetState.ATTENTION
 
-        // Your tap was timed by this phone, so it is measured against this phone. Everything
-        // else on this screen lives in the host's frame; mixing the two here would make a
-        // reaction last a second longer or shorter than it looks, for no reason anyone could
-        // find later.
-        if (lastAnswer != null && phoneNow - lastAnswer.at < REACTION_SECONDS) {
+        // Your own tap. The request it answered is gone from this snapshot — answering it is
+        // what removed it — so the session travels with the answer rather than being looked up.
+        // Measured against this phone because this phone is what timed it; everything else
+        // here lives in the host's frame, and mixing the two would make the reaction a second
+        // longer or shorter than it looks for no reason anyone could find later.
+        if (lastAnswer != null &&
+            lastAnswer.session == session.id &&
+            phoneNow - lastAnswer.at < REACTION_SECONDS
+        ) {
             return if (lastAnswer.verdict == Verdict.ONCE) PetState.CELEBRATE else PetState.DIZZY
         }
 
-        // Somebody answered in the terminal. Worth reacting to as much as your own tap is —
-        // and measured in the host's frame, since both stamps came from there. The id check
-        // stops him celebrating twice over a decision you made here.
-        val resolved = snapshot.resolved
-        if (resolved != null &&
-            resolved.id != lastAnswer?.id &&
-            snapshot.now - resolved.at in 0 until REACTION_SECONDS
-        ) {
-            when (resolved.how) {
-                "allowed" -> return PetState.CELEBRATE
-                "denied" -> return PetState.DIZZY
-            }
-        }
-
-        val active = snapshot.sessions.any { snapshot.now - it.active < BUSY_SECONDS }
-        return if (active) PetState.BUSY else PetState.IDLE
-    }
-
-    /**
-     * The mood of one session's own crab.
-     *
-     * The prompt does not name a session — the wire format never needed it to, since only one
-     * request is on screen at a time — so the working directory is what ties them together.
-     * Two sessions in the same checkout will both look worried about the same request, which
-     * is a fair description of the situation.
-     */
-    fun sessionState(session: SessionSummary, snapshot: Snapshot): PetState {
-        if (snapshot.prompt?.session == session.id) return PetState.ATTENTION
-
-        // Its own request, answered somewhere else. This is the one that carries a session id,
-        // so unlike the prompt it lands on exactly the right crab.
+        // Its own request, answered somewhere else — in the terminal, or by auto mode.
         val resolved = snapshot.resolved
         if (resolved != null &&
             resolved.session == session.id &&
+            resolved.id != lastAnswer?.id &&
             snapshot.now - resolved.at in 0 until REACTION_SECONDS
         ) {
             when (resolved.how) {
@@ -139,17 +140,5 @@ object Pet {
         }
 
         return PetState.IDLE
-    }
-
-    /** What the pet is doing, in words, for the line under it. */
-    fun caption(state: PetState): String = when (state) {
-        PetState.SLEEP -> "asleep"
-        PetState.IDLE -> "waiting around"
-        PetState.BUSY -> "watching them work"
-        PetState.FINISHED -> "has something for you"
-        PetState.RESTING -> "waiting on you"
-        PetState.ATTENTION -> "needs you"
-        PetState.CELEBRATE -> "pleased"
-        PetState.DIZZY -> "shaken"
     }
 }
