@@ -308,7 +308,9 @@ object Clawd {
             "...PPPAAPPP...",
             jaw,
             "...PPPPPPPP...",
-            "..PPPPPPPPPP..",
+            // Pauldrons. He is armoured in every picture of him, and two grey cells at the
+            // shoulders are the whole of it at this size.
+            "..KPPPPPPPPK..",
             legs,
         )
 
