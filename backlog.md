@@ -14,17 +14,7 @@ pleasant, not what makes it work.
   `file` / `chunk` / `file_end` / `char_end` folder-push transfer: streaming GIFs over BLE
   exists because an ESP32 has no filesystem the user can reach. A phone does.
 - Accelerometer input: shake -> `dizzy`, face-down -> nap / energy refill.
-- Level-ups. Upstream celebrates every 50K tokens, which depends on token accounting below.
-
-## Token accounting
-
-`tokens` and `tokens_today` are part of the upstream snapshot schema but no hook event carries
-them. Obtaining them means watching `transcript_path` and parsing the per-message `usage`
-records out of the JSONL.
-
-Deferred because the only consumer of the number in v1 would be a label on a dashboard, and the
-transcript format carries no stability guarantee. Revisit together with the pet, where the
-number actually drives behaviour.
+- Level-ups. Upstream celebrates every 50K tokens; the count that needs exists now.
 
 ## Claude Desktop app compatibility
 
