@@ -8,7 +8,58 @@ import Foundation
 ///
 /// Nothing here writes without being asked. The caller shows the diff and takes the answer.
 enum HookInstaller {
-    static let events = ["PermissionRequest", "SessionStart", "SessionEnd", "PostToolUse"]
+    /// One hook: which event, where it posts, and what the phone loses without it.
+    struct Hook {
+        let event: String
+        let path: String
+        /// Only the tools worth showing. Without a matcher these fire on every Read and Grep,
+        /// which is a lot of noise for a cosmetic feed.
+        var matcher: String?
+        /// Nil means the standard five seconds.
+        var timeout: Int?
+        /// Said out loud by `status`, so a missing line in a JSON file is not diagnosed by
+        /// staring at an animation that never plays.
+        let purpose: String
+    }
+
+    /// Every hook the bridge installs, in one place.
+    ///
+    /// There were two of these lists once — this one and the snippet `print-hook` renders —
+    /// and they drifted apart: four events were printed and never installed, while
+    /// `install-hook` reported the file was already up to date and rewrote it unchanged. One
+    /// list, three readers.
+    static func hooks(window: TimeInterval) -> [Hook] {
+        let tools = "Bash|Write|Edit|Task"
+        return [
+            // A minute past the bridge's own window, so the bridge is always the side that
+            // decides to give up.
+            Hook(event: "PermissionRequest", path: "permission-request", matcher: nil,
+                 timeout: Int(window) + 60, purpose: "the approvals themselves"),
+            Hook(event: "SessionStart", path: "session-start", matcher: nil, timeout: nil,
+                 purpose: "sessions appearing"),
+            Hook(event: "SessionEnd", path: "session-end", matcher: nil, timeout: nil,
+                 purpose: "sessions leaving"),
+            Hook(event: "PostToolUse", path: "tool-use", matcher: tools, timeout: nil,
+                 purpose: "recent calls, and clearing a card the terminal answered"),
+            Hook(event: "PostToolUseFailure", path: "tool-use", matcher: tools, timeout: nil,
+                 purpose: "clearing a card when the command failed"),
+            Hook(event: "UserPromptSubmit", path: "prompt", matcher: nil, timeout: nil,
+                 purpose: "what each session was asked to do"),
+            Hook(event: "PermissionDenied", path: "permission-denied", matcher: nil,
+                 timeout: nil, purpose: "denials made by auto mode"),
+            Hook(event: "Stop", path: "turn-end", matcher: nil, timeout: nil,
+                 purpose: "finished, resting, and clearing a card denied by hand"),
+        ]
+    }
+
+    /// The block `print-hook` shows, rendered from the same list that installs it.
+    static func snippet(port: Int, window: TimeInterval) -> String {
+        var events = JSONValue.object([])
+        for hook in hooks(window: window) {
+            events[hook.event] = .array([entry(hook, port: port)])
+        }
+        return JSONValue.object([("hooks", events)]).serialized()
+    }
 
     struct Plan {
         let path: URL
@@ -34,11 +85,11 @@ enum HookInstaller {
         }
 
         var hooks = root["hooks"] ?? .object([])
-        for event in events {
-            let existing = hooks[event]?.arrayValue ?? []
-            hooks[event] = .array(merge(entry(for: event, port: port, window: window),
-                                        into: existing,
-                                        base: base(port: port)))
+        for hook in Self.hooks(window: window) {
+            let existing = hooks[hook.event]?.arrayValue ?? []
+            hooks[hook.event] = .array(merge(entry(hook, port: port),
+                                             into: existing,
+                                             base: base(port: port)))
         }
         root["hooks"] = hooks
 
@@ -73,28 +124,14 @@ enum HookInstaller {
 
     static func base(port: Int) -> String { "http://127.0.0.1:\(port)/" }
 
-    static func entry(for event: String, port: Int, window: TimeInterval) -> JSONValue {
-        let base = base(port: port)
-        switch event {
-        case "PermissionRequest":
-            // A minute past the bridge's own window, so the bridge is always the side that
-            // decides to give up.
-            return .object([
-                ("hooks", .array([handler(url: base + "permission-request",
-                                          timeout: Int(window) + 60)])),
-            ])
-        case "SessionStart":
-            return .object([("hooks", .array([handler(url: base + "session-start", timeout: 5)]))])
-        case "SessionEnd":
-            return .object([("hooks", .array([handler(url: base + "session-end", timeout: 5)]))])
-        default:
-            // Only the tools worth showing in the phone's recent-calls list. Without a matcher
-            // this fires on every Read and Grep, which is a lot of noise for a cosmetic feed.
-            return .object([
-                ("matcher", .string("Bash|Write|Edit|Task")),
-                ("hooks", .array([handler(url: base + "tool-use", timeout: 5)])),
-            ])
-        }
+    static func entry(_ hook: Hook, port: Int) -> JSONValue {
+        var fields: [(String, JSONValue)] = []
+        if let matcher = hook.matcher { fields.append(("matcher", .string(matcher))) }
+        fields.append((
+            "hooks",
+            .array([handler(url: base(port: port) + hook.path, timeout: hook.timeout ?? 5)])
+        ))
+        return .object(fields)
     }
 
     private static func handler(url: String, timeout: Int) -> JSONValue {

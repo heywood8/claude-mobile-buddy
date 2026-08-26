@@ -114,10 +114,51 @@ struct HookInstallerTests {
 
     @Test("derives the hook timeout from the window")
     func timeoutFollowsWindow() throws {
-        let entry = HookInstaller.entry(for: "PermissionRequest", port: 8787, window: 1800)
+        let approval = try #require(
+            HookInstaller.hooks(window: 1800).first { $0.event == "PermissionRequest" })
+        let entry = HookInstaller.entry(approval, port: 8787)
         let handler = try #require(entry["hooks"]?.arrayValue?.first)
         #expect(handler["timeout"] == .number("1860"))
         #expect(handler["url"]?.stringValue == "http://127.0.0.1:8787/permission-request")
+    }
+
+    /// The bug this pair of tests exists for: the events were listed twice, once here and once
+    /// in the snippet `print-hook` renders. Four of them were printed for a day and never
+    /// installed, and `install-hook` reported the file was already up to date.
+    @Test("installs every hook the snippet advertises")
+    func snippetAndPlanAgree() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmb-agree-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: path) }
+        try "{}".write(to: path, atomically: true, encoding: .utf8)
+
+        let plan = try HookInstaller.plan(path: path, port: 8787, window: 1800)
+        let installed = try #require(try JSONValue.parse(plan.after)["hooks"])
+        let advertised = try #require(
+            try JSONValue.parse(HookInstaller.snippet(port: 8787, window: 1800))["hooks"])
+
+        for hook in HookInstaller.hooks(window: 1800) {
+            #expect(installed[hook.event] != nil, "\(hook.event) is not installed")
+            #expect(advertised[hook.event] != nil, "\(hook.event) is not printed")
+        }
+    }
+
+    @Test("adds an event that is missing from a file already carrying the others")
+    func addsNewEventsToAnOlderFile() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmb-older-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: path) }
+        // What a file installed by an earlier version looks like: some of ours, not all.
+        try """
+        {"hooks":{"PermissionRequest":[{"hooks":[{"type":"http",\
+        "url":"http://127.0.0.1:8787/permission-request","timeout":1860}]}]}}
+        """.write(to: path, atomically: true, encoding: .utf8)
+
+        let plan = try HookInstaller.plan(path: path, port: 8787, window: 1800)
+        #expect(!plan.isNoop, "a file missing seven events cannot be up to date")
+        let hooks = try #require(try JSONValue.parse(plan.after)["hooks"])
+        #expect(hooks["Stop"] != nil)
+        #expect(hooks["UserPromptSubmit"] != nil)
     }
 
     @Test("creates the block when there is no settings file at all")

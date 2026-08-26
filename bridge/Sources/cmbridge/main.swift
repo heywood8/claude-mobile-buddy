@@ -37,49 +37,10 @@ let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.def
 let skippedTools: Set<String> = takeValue("--skip-tools")
     .map { Set($0.split(separator: ",").map(String.init)) } ?? Coordinator.defaultSkippedTools
 
-func hookSnippet(port: Int, window: TimeInterval) -> String {
-    let base = "http://127.0.0.1:\(port)"
-    // Derived from the bridge's own window and deliberately a minute longer, so the bridge is
-    // always the side that decides to give up. Set it lower than the window and the hook
-    // abandons the request while your phone is still showing it.
-    let permissionTimeout = Int(window) + 60
-    return """
-    {
-      "hooks": {
-        "PermissionRequest": [
-          { "hooks": [ { "type": "http", "url": "\(base)/permission-request", "timeout": \(permissionTimeout) } ] }
-        ],
-        "SessionStart": [
-          { "hooks": [ { "type": "http", "url": "\(base)/session-start", "timeout": 5 } ] }
-        ],
-        "SessionEnd": [
-          { "hooks": [ { "type": "http", "url": "\(base)/session-end", "timeout": 5 } ] }
-        ],
-        "PostToolUse": [
-          { "matcher": "Bash|Write|Edit|Task",
-            "hooks": [ { "type": "http", "url": "\(base)/tool-use", "timeout": 5 } ] }
-        ],
-        "PostToolUseFailure": [
-          { "matcher": "Bash|Write|Edit|Task",
-            "hooks": [ { "type": "http", "url": "\(base)/tool-use", "timeout": 5 } ] }
-        ],
-        "UserPromptSubmit": [
-          { "hooks": [ { "type": "http", "url": "\(base)/prompt", "timeout": 5 } ] }
-        ],
-        "PermissionDenied": [
-          { "hooks": [ { "type": "http", "url": "\(base)/permission-denied", "timeout": 5 } ] }
-        ],
-        "Stop": [
-          { "hooks": [ { "type": "http", "url": "\(base)/turn-end", "timeout": 5 } ] }
-        ]
-      }
-    }
-    """
-}
 
 switch arguments.first {
 case "print-hook":
-    print(hookSnippet(port: port, window: window))
+    print(HookInstaller.snippet(port: port, window: window))
 
 case "pair":
     do {
@@ -211,28 +172,19 @@ case "status":
     print("Listening : \(probe(port: port) ? "yes on \(port)" : "no")")
 
     // What the phone can show is exactly what Claude Code is configured to send, and a crab
-    // stuck in one mood is a poor way to discover a line missing from a JSON file. Checked by
-    // looking for our own URLs: they are unique strings, and a diagnostic that needs a parser
-    // is one that stops working the day the file grows something unexpected.
-    let endpoints = [
-        ("/permission-request", "the approvals themselves"),
-        ("/session-start", "sessions appearing"),
-        ("/session-end", "sessions leaving"),
-        // Two events share one endpoint, so these are looked for by name. The quote and colon
-        // matter: "PostToolUse" is a prefix of "PostToolUseFailure", and without them a file
-        // carrying only the second would report both as present.
-        ("\"PostToolUse\":", "recent calls, and clearing a card the terminal answered"),
-        ("\"PostToolUseFailure\":", "clearing a card when the command failed"),
-        ("/prompt", "what each session was asked to do"),
-        ("/permission-denied", "denials made by auto mode"),
-        ("/turn-end", "finished, resting, and clearing a card denied by hand"),
-    ]
+    // stuck in one mood is a poor way to discover a line missing from a JSON file.
+    //
+    // Read from the same list that installs them, and looked for by event name: two of them
+    // share an endpoint, and the quote and colon matter because "PostToolUse" is a prefix of
+    // "PostToolUseFailure". Substrings rather than a parser — a diagnostic that needs one
+    // stops working the day the file grows something unexpected.
+    let wanted = HookInstaller.hooks(window: window)
     let settingsText = (try? String(
         contentsOf: settingsPath ?? HookInstaller.defaultPath, encoding: .utf8)) ?? ""
-    let missing = endpoints.filter { !settingsText.contains($0.0) }
-    print("Hooks     : \(endpoints.count - missing.count) of \(endpoints.count) installed")
-    for (path, purpose) in missing {
-        print("  missing \(path) — \(purpose)")
+    let missing = wanted.filter { !settingsText.contains("\"\($0.event)\":") }
+    print("Hooks     : \(wanted.count - missing.count) of \(wanted.count) installed")
+    for hook in missing {
+        print("  missing \(hook.event) — \(hook.purpose)")
     }
     if !missing.isEmpty {
         print()
