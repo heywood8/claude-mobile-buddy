@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.Color
  * edit in a diff, rather than a binary nobody will ever open again. This is our own crab, not
  * theirs; the shape is a homage and the pixels are ours.
  *
- * Frames are square-ish grids of equal-length rows. The renderer scales them by whole numbers
- * only, so the pixels stay pixels instead of turning into a smudge.
+ * Frames are grids of equal-length rows. The renderer scales them by whole numbers only, so
+ * the pixels stay pixels instead of turning into a smudge.
  */
 object Clawd {
     /** `#DA7758`, the body colour the mascot is known by. */
@@ -23,24 +23,8 @@ object Clawd {
 
     val EYE = Color(0xFF241A15)
 
-    /** How long a frame is held. The original stomps at eight frames a second. */
+    /** How long a frame is held by default. The original stomps at eight frames a second. */
     const val FRAME_MILLIS = 125L
-
-    /**
-     * How long each frame is held.
-     *
-     * Per state and per frame, because a blink and a stomp are not the same event played at
-     * different speeds. Idle holds its open-eyed frame for two and a half seconds and the
-     * closed one for a seventh of a second; the same pair at an even rate is a twitch.
-     */
-    fun hold(state: PetState, frame: Int): Long = when (state) {
-        PetState.IDLE -> if (frame % 2 == 0) 2600 else 140
-        PetState.SLEEP -> 1400
-        PetState.BUSY -> 220
-        PetState.ATTENTION -> 320
-        PetState.CELEBRATE -> FRAME_MILLIS
-        PetState.DIZZY -> 180
-    }
 
     /**
      * Headroom reserved above the sprite, in cells: the tallest bob any state asks for.
@@ -50,6 +34,27 @@ object Clawd {
      * the moment he got excited, which is a strange thing for a screen to do.
      */
     const val MAX_BOB_CELLS = 3
+
+    /**
+     * How long each frame is held.
+     *
+     * Per state and per frame, because a blink and a stomp are not the same event at different
+     * speeds. Idle sits with its eyes open for a couple of seconds, shuts them for an eighth
+     * of one, and looks away now and then — an even rate turns all three into a twitch.
+     */
+    fun hold(state: PetState, frame: Int): Long = when (state) {
+        PetState.IDLE -> when (frame % 4) {
+            0 -> 2400
+            1 -> 1700
+            2 -> 130
+            else -> 900
+        }
+        PetState.SLEEP -> 1500
+        PetState.BUSY -> 200
+        PetState.ATTENTION -> 280
+        PetState.CELEBRATE -> FRAME_MILLIS
+        PetState.DIZZY -> 160
+    }
 
     /** How far the whole sprite rises, in cells. Whole numbers only — see the renderer. */
     fun bobCells(state: PetState): Float = when (state) {
@@ -78,158 +83,90 @@ object Clawd {
         else -> null
     }
 
+    // The shell, which every frame shares. Faces and legs are what change.
+    private const val TOP = "..BBBBBBBBBB.."
+    private const val WIDE = ".BBBBBBBBBBBB."
+    private const val BOTTOM = "..BBBBBBBBBB.."
+
+    private const val EYES_OPEN = ".BBEEBBBBEEBB."
+    private const val EYES_RIGHT = ".BBBEEBBEEBBB."
+    private const val EYES_LEFT = ".BEEBBBBBBEEB."
+    private const val EYES_SHUT = ".BBBBBBBBBBBB."
+    private const val EYES_HAPPY = ".BBBBBEEBBBBB."
+
+    // Four phases of a walk, and one of standing still.
+    private const val STAND_A = ".L..L....L..L."
+    private const val STAND_B = "L....L..L....L"
+    private const val STEP_A = "..L.LL...L.L.."
+    private const val STEP_B = ".L....L.L....L"
+    private const val STEP_C = ".L...L..L...L."
+    private const val STEP_D = "L.....LL.....L"
+    private const val TUCKED = "..L........L.."
+    private const val BLANK = ".............."
+
+    private fun body(face: String, faceLower: String, legsUpper: String, legsLower: String) =
+        listOf(BLANK, TOP, WIDE, face, faceLower, WIDE, BOTTOM, legsUpper, legsLower)
+
+    /** Claws raised above the shell, for the states that are asking for something. */
+    private fun raised(
+        claws: String,
+        clawsLower: String,
+        face: String,
+        faceLower: String,
+        legsUpper: String,
+        legsLower: String,
+    ) = listOf(claws, clawsLower, WIDE, face, faceLower, WIDE, BOTTOM, legsUpper, legsLower)
+
     /**
      * Frames per state, in the order they play.
      *
-     * Where a state needs only motion rather than new art — a bob, a lean — it gets one frame
-     * and the motion happens in the renderer. Adding frames is a text edit; adding a state is
-     * a line here and a line in [PetState].
+     * Adding a frame is a text edit; adding a state is a line here and a line in [PetState].
      */
     val frames: Map<PetState, List<List<String>>> = mapOf(
         PetState.SLEEP to listOf(
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                "..L........L..",
-                "..............",
-            ),
-            listOf(
-                "..............",
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                "..L........L..",
-                "..............",
-            ),
+            listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(BLANK, BLANK, TOP, WIDE, EYES_SHUT, WIDE, BOTTOM, TUCKED, BLANK),
+            listOf(BLANK, TOP, WIDE, EYES_SHUT, WIDE, WIDE, BOTTOM, TUCKED, BLANK),
         ),
         PetState.IDLE to listOf(
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                ".L..L....L..L.",
-                "L....L..L....L",
-            ),
+            body(EYES_OPEN, EYES_OPEN, STAND_A, STAND_B),
+            body(EYES_OPEN, EYES_OPEN, STAND_B, STAND_A),
             // The blink. One frame of it, which is all a blink is.
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                ".L..L....L..L.",
-                "L....L..L....L",
-            ),
+            body(EYES_SHUT, EYES_OPEN, STAND_A, STAND_B),
+            // And a glance at whatever moved.
+            body(EYES_RIGHT, EYES_RIGHT, STAND_A, STAND_B),
         ),
         PetState.BUSY to listOf(
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                ".L..L....L..L.",
-                "L....L..LL...L",
-            ),
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                "..L.LL...L.L..",
-                ".L....L.L....L",
-            ),
+            body(EYES_OPEN, EYES_OPEN, STEP_A, STEP_B),
+            body(EYES_RIGHT, EYES_RIGHT, STEP_C, STEP_D),
+            body(EYES_OPEN, EYES_OPEN, STEP_B, STEP_A),
+            body(EYES_LEFT, EYES_LEFT, STEP_D, STEP_C),
         ),
         PetState.ATTENTION to listOf(
-            listOf(
-                "L............L",
-                "LL.BBBBBBBB.LL",
-                ".BBBBBBBBBBBB.",
-                ".BEEEBBBBEEEB.",
-                ".BEEEBBBBEEEB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                ".L..L....L..L.",
-                "L....L..L....L",
+            raised(
+                "L............L", "LL.BBBBBBBB.LL",
+                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STAND_A, STAND_B,
             ),
-            listOf(
-                "LL..........LL",
-                "L..BBBBBBBB..L",
-                ".BBBBBBBBBBBB.",
-                ".BEEEBBBBEEEB.",
-                ".BEEEBBBBEEEB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                "L...L....L...L",
-                ".L...L..L...L.",
+            raised(
+                "LL..........LL", "L..BBBBBBBB..L",
+                ".BEEEBBBBEEEB.", ".BEEEBBBBEEEB.", STEP_C, STEP_D,
+            ),
+            raised(
+                "L............L", "LL.BBBBBBBB.LL",
+                ".BEEEBBBBEEEB.", EYES_OPEN, STAND_B, STAND_A,
             ),
         ),
         PetState.CELEBRATE to listOf(
-            listOf(
-                "L............L",
-                ".L.BBBBBBBB.L.",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBEEBBBBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                ".L..L....L..L.",
-                "L....L..L....L",
-            ),
-            listOf(
-                "..............",
-                "L..BBBBBBBB..L",
-                ".BBBBBBBBBBBB.",
-                ".BBEEBBBBEEBB.",
-                ".BBBBBEEBBBBB.",
-                ".BBBBBBBBBBBB.",
-                "..BBBBBBBBBB..",
-                "..L.L....L.L..",
-                ".L...L..L...L.",
-            ),
+            raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_A, STAND_B),
+            raised("LL..........LL", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_A, STEP_B),
+            raised("L............L", ".L.BBBBBBBB.L.", EYES_OPEN, EYES_HAPPY, STAND_B, STAND_A),
+            raised("..L........L..", "L..BBBBBBBB..L", EYES_HAPPY, EYES_HAPPY, STEP_C, STEP_D),
         ),
         PetState.DIZZY to listOf(
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BEBEBBBBEBEB.",
-                ".BBEBBBBBBEBB.",
-                ".BEBEBBBBEBEB.",
-                "..BBBBBBBBBB..",
-                ".L...L..L...L.",
-                "L.....LL.....L",
-            ),
-            listOf(
-                "..............",
-                "..BBBBBBBBBB..",
-                ".BBBBBBBBBBBB.",
-                ".BBEBBBBBBEBB.",
-                ".BEBEBBBBEBEB.",
-                ".BBEBBBBBBEBB.",
-                "..BBBBBBBBBB..",
-                "L...L....L...L",
-                ".L....LL....L.",
-            ),
+            body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_C, STEP_D),
+            body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_A, STEP_B),
+            body(".BEBEBBBBEBEB.", ".BBEBBBBBBEBB.", STEP_D, STEP_C),
+            body(".BBEBBBBBBEBB.", ".BEBEBBBBEBEB.", STEP_B, STEP_A),
         ),
     )
 }

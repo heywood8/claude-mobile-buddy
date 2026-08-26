@@ -48,6 +48,25 @@ data class SessionSummary(
     val decided: Long = 0,
     /** Tokens the model has processed for it, as far as the transcript says. */
     val tokens: Long = 0,
+    /** The last thing you asked it for, trimmed to a glance by the bridge. */
+    val task: String = "",
+)
+
+/**
+ * A decision taken somewhere other than this phone.
+ *
+ * Claude Code has no hook for the moment somebody answers the prompt in the terminal, so the
+ * bridge infers it: a tool that ran was allowed. [how] is `allowed`, `denied`, or `gone` when
+ * the request disappeared without saying which way.
+ */
+@Serializable
+data class Resolution(
+    val id: String = "",
+    /** Whose request it was, so the right session's pet reacts. */
+    val session: String = "",
+    val how: String = "",
+    /** Host clock, to be read against [Snapshot.now]. */
+    val at: Long = 0,
 )
 
 /** Complete state, not a delta. */
@@ -69,6 +88,8 @@ data class Snapshot(
     /** Since local midnight on the host. */
     @SerialName("tokens_today")
     val tokensToday: Long = 0,
+    /** The last decision taken anywhere but here. */
+    val resolved: Resolution? = null,
 )
 
 @Serializable

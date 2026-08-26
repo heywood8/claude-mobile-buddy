@@ -8,18 +8,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -42,13 +44,14 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 /**
- * What is waiting, and the controls for it.
+ * What is waiting, and nothing else that can wait.
  *
  * Two layouts. Held upright, one column. Turned on its side — which is how a phone propped on
- * a desk sits, and the reason the keep-awake switch exists — the decision keeps the width and
- * the controls move to a rail beside it. In one column on a landscape screen the buttons that
- * answer a request ended up below two settings switches, off the bottom of the display.
+ * a desk sits, and the reason the keep-awake switch exists — the request keeps the width and
+ * the answer moves to a rail of its own, where the buttons can be big enough to hit without
+ * aiming. Everything that is a setting rather than a decision lives behind the menu.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     modifier: Modifier = Modifier,
@@ -60,26 +63,46 @@ fun DashboardScreen(
     awake: Boolean,
     onAwakeChange: (Boolean) -> Unit,
 ) {
+    var settingsOpen by remember { mutableStateOf(false) }
+    val prompt = BuddyState.snapshot?.prompt
+
     BoxWithConstraints(modifier) {
         // A width breakpoint rather than an orientation check: what matters is whether there
         // is room for two columns, which is also true of a tablet held upright.
         val wide = maxWidth > 600.dp
         if (wide) {
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    PendingDecision()
-                    PetView()
+                    PendingDecision(withButtons = false)
                     Status()
                     Sessions()
                 }
                 Column(
-                    Modifier.width(320.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
+                    Modifier.width(240.dp).fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        MenuButton { settingsOpen = true }
+                    }
+                    if (prompt != null) {
+                        // The whole reason for the rail. On a phone lying on a desk you answer
+                        // this without picking it up, and a 40dp button asks you to aim.
+                        Button(
+                            onClick = {
+                                BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                            },
+                            modifier = Modifier.fillMaxWidth().height(104.dp),
+                        ) { Text("Allow", style = MaterialTheme.typography.headlineSmall) }
+                        OutlinedButton(
+                            onClick = {
+                                BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                            },
+                            modifier = Modifier.fillMaxWidth().height(104.dp),
+                        ) { Text("Deny", style = MaterialTheme.typography.headlineSmall) }
+                    }
                 }
             }
         } else {
@@ -87,12 +110,49 @@ fun DashboardScreen(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                PendingDecision()
-                PetView()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    MenuButton { settingsOpen = true }
+                }
+                PendingDecision(withButtons = true)
                 Status()
                 Sessions()
-                Spacer(Modifier.height(4.dp))
-                Controls(onStart, onStop, onPair, onHistory, onHosts, awake, onAwakeChange)
+            }
+        }
+    }
+
+    if (settingsOpen) {
+        ModalBottomSheet(onDismissRequest = { settingsOpen = false }) {
+            Column(
+                Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Controls(
+                    onStart = { settingsOpen = false; onStart() },
+                    onStop = { settingsOpen = false; onStop() },
+                    onPair = { settingsOpen = false; onPair() },
+                    onHistory = { settingsOpen = false; onHistory() },
+                    onHosts = { settingsOpen = false; onHosts() },
+                    awake = awake,
+                    onAwakeChange = onAwakeChange,
+                )
+            }
+        }
+    }
+}
+
+/** Three bars, drawn rather than imported: everything else here is already rectangles. */
+@Composable
+private fun MenuButton(onClick: () -> Unit) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    IconButton(onClick = onClick) {
+        Canvas(Modifier.size(22.dp)) {
+            val thickness = 2.dp.toPx()
+            for (fraction in listOf(0.25f, 0.5f, 0.75f)) {
+                drawRect(
+                    color = color,
+                    topLeft = Offset(0f, size.height * fraction - thickness / 2f),
+                    size = Size(size.width, thickness),
+                )
             }
         }
     }
@@ -101,13 +161,12 @@ fun DashboardScreen(
 /**
  * The request, as something the crab is saying.
  *
- * A card asking "Approve Bash?" is the machine talking about itself. The same words in a
+ * A card headed "Approve Bash?" is the machine talking about itself. The same words in a
  * bubble beside the thing that wants them are a question from somebody, which is what an
- * approval actually is — and it puts the pet on the one screen where you were going to look
- * anyway, instead of parking it above as decoration.
+ * approval is.
  */
 @Composable
-private fun PendingDecision() {
+private fun PendingDecision(withButtons: Boolean) {
     val prompt = BuddyState.snapshot?.prompt ?: return
     val bubble = MaterialTheme.colorScheme.surfaceVariant
 
@@ -125,13 +184,15 @@ private fun PendingDecision() {
                 if (prompt.cwd.isNotEmpty()) {
                     Text(prompt.cwd, style = MaterialTheme.typography.bodySmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
-                    }) { Text("Allow") }
-                    OutlinedButton(onClick = {
-                        BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
-                    }) { Text("Deny") }
+                if (withButtons) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP)
+                        }) { Text("Allow") }
+                        OutlinedButton(onClick = {
+                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP)
+                        }) { Text("Deny") }
+                    }
                 }
             }
         }
@@ -146,47 +207,6 @@ private fun BubbleTail(color: Color, modifier: Modifier = Modifier) {
         drawRect(color, Offset(size.width - step, 0f), Size(step, step * 3))
         drawRect(color, Offset(size.width - step * 2, step), Size(step, step))
     }
-}
-
-/**
- * The pet, which does nothing and is the first thing you look at.
- *
- * Its state is derived, never stored: what the bridge already said, plus your own last tap.
- * The only thing kept here is which of the two frames is showing.
- */
-@Composable
-private fun PetView() {
-    // While something is waiting, the crab is in the bubble asking about it. Two of him on one
-    // screen, one of them saying nothing, would read as a bug rather than as a pet.
-    if (BuddyState.snapshot?.prompt != null) return
-
-    // A slow tick, only so the mood is recomputed against a current clock: without it the pet
-    // would sit in whatever state the last snapshot left it in. The animation itself runs on
-    // its own clock inside ClawdView.
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1000)
-            tick++
-        }
-    }
-
-    val snapshot = BuddyState.snapshot
-    val state = Pet.state(
-        running = BuddyState.running,
-        linked = BuddyState.linked,
-        snapshot = snapshot,
-        lastAnswer = BuddyState.lastAnswer,
-        phoneNow = System.currentTimeMillis() / 1000,
-    )
-
-    ClawdView(state, Modifier.fillMaxWidth().height(104.dp))
-
-    val level = Pet.level(snapshot?.tokens ?: 0)
-    Text(
-        text = if (level > 0) "${Pet.caption(state)} · lvl $level" else Pet.caption(state),
-        style = MaterialTheme.typography.bodySmall,
-    )
 }
 
 @Composable
@@ -210,11 +230,22 @@ private fun Status() {
             // Absent rather than zero when the transcript could not be read: a confident
             // "0 tokens" next to a working session would be a lie about the wrong thing.
             if (snapshot.tokensToday > 0) append(" · ${tokens(snapshot.tokensToday)} today")
+            // The level lived under the pet that used to sit here; the crabs are the sessions
+            // now, and a level belongs to all of them at once.
+            val level = Pet.level(snapshot.tokens)
+            if (level > 0) append(" · lvl $level")
         }
         Text(line, style = MaterialTheme.typography.bodySmall)
     }
 }
 
+/**
+ * One crab per session, each on its own beat.
+ *
+ * The count on the line above answers "how many"; this answers "which ones are working", which
+ * is the thing you actually scan for. Every crab gets a phase derived from its session id, so
+ * a column of them does not blink in unison and stop looking like separate animals.
+ */
 @Composable
 private fun Sessions() {
     val snapshot = BuddyState.snapshot ?: return
@@ -222,12 +253,28 @@ private fun Sessions() {
 
     Text("Sessions", style = MaterialTheme.typography.titleSmall)
     for (session in snapshot.sessions) {
-        Column(Modifier.padding(bottom = 6.dp)) {
-            Text(
-                session.cwd.ifEmpty { session.id.take(8) },
-                style = MaterialTheme.typography.bodyMedium,
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ClawdView(
+                state = Pet.sessionState(session, snapshot),
+                modifier = Modifier.width(64.dp).height(52.dp),
+                phase = session.id.hashCode(),
             )
-            Text(describe(session, snapshot.now), style = MaterialTheme.typography.bodySmall)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    session.cwd.ifEmpty { session.id.take(8) },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                // What you asked for, above what it has been doing about it. An hour later
+                // this is the line that says whether the approval on screen makes sense.
+                if (session.task.isNotEmpty()) {
+                    Text(session.task, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(describe(session, snapshot.now), style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -296,9 +343,6 @@ private fun Controls(
                 "Paired: " + paired.joinToString { it.name.ifEmpty { it.hostId.take(8) } },
                 style = MaterialTheme.typography.bodySmall,
             )
-            // Rotating a key, adding a second Mac, taking one away: rare, and one of them
-            // wants a confirmation dialog. All of it lives a tap further in, out of the way
-            // of the buttons actually pressed.
             TextButton(onClick = onHosts) { Text("Manage") }
         }
     }

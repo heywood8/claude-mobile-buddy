@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The plate the crab sits on. Deliberately not the body colour: an orange character on an
+        orange square is a square, and the launcher will mask it into whatever shape it likes.
+    -->
+    <color name="ic_launcher_background">#1B1614</color>
+</resources>

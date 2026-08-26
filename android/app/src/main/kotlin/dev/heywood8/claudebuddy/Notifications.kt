@@ -62,7 +62,7 @@ object Notifications {
         // The command text stays off the lock screen. That a decision is waiting is not
         // sensitive; what it wants to run is.
         return Notification.Builder(context, CHANNEL_APPROVAL)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_clawd_glyph)
             .setContentTitle("Approve ${prompt.tool}?")
             // Answering one request reveals the next, which without this reads as a button
             // that did nothing.

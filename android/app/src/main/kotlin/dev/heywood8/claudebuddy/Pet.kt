@@ -72,8 +72,52 @@ object Pet {
             return if (lastAnswer.verdict == Verdict.ONCE) PetState.CELEBRATE else PetState.DIZZY
         }
 
+        // Somebody answered in the terminal. Worth reacting to as much as your own tap is —
+        // and measured in the host's frame, since both stamps came from there. The id check
+        // stops him celebrating twice over a decision you made here.
+        val resolved = snapshot.resolved
+        if (resolved != null &&
+            resolved.id != lastAnswer?.id &&
+            snapshot.now - resolved.at in 0 until REACTION_SECONDS
+        ) {
+            when (resolved.how) {
+                "allowed" -> return PetState.CELEBRATE
+                "denied" -> return PetState.DIZZY
+            }
+        }
+
         val active = snapshot.sessions.any { snapshot.now - it.active < BUSY_SECONDS }
         return if (active) PetState.BUSY else PetState.IDLE
+    }
+
+    /**
+     * The mood of one session's own crab.
+     *
+     * The prompt does not name a session — the wire format never needed it to, since only one
+     * request is on screen at a time — so the working directory is what ties them together.
+     * Two sessions in the same checkout will both look worried about the same request, which
+     * is a fair description of the situation.
+     */
+    fun sessionState(session: SessionSummary, snapshot: Snapshot): PetState {
+        val prompt = snapshot.prompt
+        if (prompt != null && prompt.cwd.isNotEmpty() && prompt.cwd == session.cwd) {
+            return PetState.ATTENTION
+        }
+
+        // Its own request, answered somewhere else. This is the one that carries a session id,
+        // so unlike the prompt it lands on exactly the right crab.
+        val resolved = snapshot.resolved
+        if (resolved != null &&
+            resolved.session == session.id &&
+            snapshot.now - resolved.at in 0 until REACTION_SECONDS
+        ) {
+            when (resolved.how) {
+                "allowed" -> return PetState.CELEBRATE
+                "denied" -> return PetState.DIZZY
+            }
+        }
+        val quiet = snapshot.now - session.active
+        return if (session.active > 0 && quiet < BUSY_SECONDS) PetState.BUSY else PetState.IDLE
     }
 
     /** What the pet is doing, in words, for the line under it. */

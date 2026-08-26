@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The same crab the dashboard draws, as rectangles again.
+
+    An adaptive icon is 108dp with only the middle 72dp guaranteed to survive whatever mask the
+    launcher applies, so the sprite sits on a 5dp grid inside that safe square: fourteen cells
+    across, nine down, resting a little above centre because the legs read as part of the
+    silhouette and the mask eats corners, not middles.
+
+    Rectangles are merged into runs rather than emitted per cell — the shape is identical and
+    the file is readable by a person.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shell -->
+    <path
+        android:fillColor="#DA7758"
+        android:pathData="M29,37 h50 v5 h-50 z
+                          M24,42 h60 v20 h-60 z
+                          M29,62 h50 v5 h-50 z" />
+
+    <!-- Eyes, punched out of the shell -->
+    <path
+        android:fillColor="#241A15"
+        android:pathData="M34,47 h10 v10 h-10 z
+                          M64,47 h10 v10 h-10 z" />
+
+    <!-- Legs -->
+    <path
+        android:fillColor="#DD775B"
+        android:pathData="M24,67 h5 v5 h-5 z
+                          M39,67 h5 v5 h-5 z
+                          M64,67 h5 v5 h-5 z
+                          M79,67 h5 v5 h-5 z
+                          M19,72 h5 v5 h-5 z
+                          M44,72 h5 v5 h-5 z
+                          M59,72 h5 v5 h-5 z
+                          M84,72 h5 v5 h-5 z" />
+</vector>

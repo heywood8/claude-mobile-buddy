@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The notification icon. Android throws away every colour here and keeps only the alpha, so
+    the shape is all there is: a crab at the size of a status-bar glyph, eyes punched through
+    with evenOdd because two dark pixels would come back as solid white otherwise.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M2,5 h20 v2 h-20 z
+                          M0,7 h24 v6 h-24 z
+                          M2,13 h20 v2 h-20 z
+                          M2,15 h2 v2 h-2 z
+                          M8,15 h2 v2 h-2 z
+                          M14,15 h2 v2 h-2 z
+                          M20,15 h2 v2 h-2 z
+                          M4,7 h4 v4 h-4 z
+                          M16,7 h4 v4 h-4 z" />
+</vector>

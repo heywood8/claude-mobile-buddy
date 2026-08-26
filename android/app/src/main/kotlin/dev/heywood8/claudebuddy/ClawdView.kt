@@ -2,6 +2,7 @@ package dev.heywood8.claudebuddy
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -28,15 +29,27 @@ import kotlin.math.roundToInt
  * motion on a sprite this size reads as the whole character wobbling out of focus.
  */
 @Composable
-fun ClawdView(state: PetState, modifier: Modifier = Modifier) {
+fun ClawdView(
+    state: PetState,
+    modifier: Modifier = Modifier,
+    /**
+     * Anything stable and arbitrary — a session id will do.
+     *
+     * Several crabs on one screen blinking on the same beat stop reading as several animals
+     * and start reading as a repeating background. Offsetting each one's frame and bob by a
+     * number derived from what it represents is enough to break that, and costs nothing.
+     */
+    phase: Int = 0,
+) {
     val frames = Clawd.frames[state] ?: return
+    val offset = (phase % 100_000).let { if (it < 0) -it else it }
 
-    var index by remember(state) { mutableIntStateOf(0) }
-    LaunchedEffect(state) {
+    var index by remember(state, phase) { mutableIntStateOf(offset % frames.size) }
+    LaunchedEffect(state, phase) {
         // Frame holds are per state and per frame, because a blink and a stomp are not the
         // same thing at the same rate: eight frames a second is right for stomping and reads
         // as a nervous tic on a pair of eyes.
-        index = 0
+        index = offset % frames.size
         while (true) {
             delay(Clawd.hold(state, index))
             index++
@@ -50,6 +63,7 @@ fun ClawdView(state: PetState, modifier: Modifier = Modifier) {
         animationSpec = infiniteRepeatable(
             animation = tween(Clawd.bobMillis(state), easing = LinearEasing),
             repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(offset % Clawd.bobMillis(state)),
         ),
         label = "bob",
     )
