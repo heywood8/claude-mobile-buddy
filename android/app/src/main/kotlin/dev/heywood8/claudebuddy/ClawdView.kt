@@ -61,12 +61,20 @@ fun ClawdView(state: PetState, modifier: Modifier = Modifier) {
     // The caller owns the size. He is a status widget in one place and a speaker in another,
     // and the two want different room.
     Canvas(modifier) {
-        val cell = floor(minOf(size.width / cols, size.height / rows))
+        // The jump needs somewhere to go. Fitting the sprite to the box exactly and then
+        // lifting it sent the head out through the top of the box — and clipped, since a
+        // Canvas draws inside its own bounds and nowhere else.
+        val tall = rows + Clawd.MAX_BOB_CELLS
+        val cell = floor(minOf(size.width / cols, size.height / tall))
         if (cell < 1f) return@Canvas
+
         val originX = ((size.width - cell * cols) / 2f).roundToInt().toFloat()
         // Whole cells, so the crab hops rather than drifts.
         val lift = (bob * Clawd.bobCells(state)).roundToInt() * cell
-        val originY = ((size.height - cell * rows) / 2f).roundToInt().toFloat() - lift
+        // Resting at the bottom of the reserved space, jumping up into it.
+        val rest = ((size.height - cell * tall) / 2f).roundToInt().toFloat() +
+            cell * Clawd.MAX_BOB_CELLS
+        val originY = rest - lift
 
         for (row in frame.indices) {
             val line = frame[row]

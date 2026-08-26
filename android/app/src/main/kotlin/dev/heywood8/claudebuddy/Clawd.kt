@@ -42,6 +42,15 @@ object Clawd {
         PetState.DIZZY -> 180
     }
 
+    /**
+     * Headroom reserved above the sprite, in cells: the tallest bob any state asks for.
+     *
+     * Reserved for every state rather than for the state doing the jumping, so the crab is the
+     * same size whatever mood he is in. Sized to the busiest state instead would shrink him
+     * the moment he got excited, which is a strange thing for a screen to do.
+     */
+    const val MAX_BOB_CELLS = 3
+
     /** How far the whole sprite rises, in cells. Whole numbers only — see the renderer. */
     fun bobCells(state: PetState): Float = when (state) {
         PetState.SLEEP -> 1f
