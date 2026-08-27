@@ -25,9 +25,11 @@ secrets/
 .env
 .env.*
 
-# Vendored agent skills — reinstall from skills-lock.json
+# Vendored agent skills — reinstall from skills-lock.json.
+# Skills written for this repo live here too, and are kept.
 .agents/
-.claude/skills/
+.claude/skills/*
+!.claude/skills/check-backlog/
 
 # Signing material never belongs in the tree; it lives in ~/.config/claude-mobile-buddy
 signing.properties
