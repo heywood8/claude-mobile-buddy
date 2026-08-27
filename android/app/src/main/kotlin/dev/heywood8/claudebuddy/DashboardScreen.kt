@@ -54,6 +54,10 @@ import kotlinx.coroutines.delay
  * a desk sits, and the reason the keep-awake switch exists — the request keeps the width and
  * the answer moves to a rail of its own, where the buttons can be big enough to hit without
  * aiming. Everything that is a setting rather than a decision lives behind the menu.
+ *
+ * A queue does not take the rail away. One request is answerable at a time, its crab rises to
+ * the top of the list wearing the accent, and everything else waiting is an edge of paper
+ * under the crab that asked.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,10 +72,11 @@ fun DashboardScreen(
     onAwakeChange: (Boolean) -> Unit,
 ) {
     var settingsOpen by remember { mutableStateOf(false) }
-    // One pair of buttons can only answer one request. With several waiting they belong beside
-    // the crabs asking, where it is obvious which is which.
-    val pending = BuddyState.snapshot?.pending.orEmpty()
-    val alone = pending.singleOrNull()
+    // The rail answers the head of the queue and only that one. A queue used to send the pair
+    // of buttons back to the crabs at their normal size, which is the size the rail exists to
+    // avoid — so instead the head is named up here and accented over there.
+    val pending = pendingNow()
+    val head = pending.firstOrNull()
 
     HandlingEffects()
     LevelUpEffect()
@@ -90,7 +95,7 @@ fun DashboardScreen(
                         Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Sessions(withButtons = alone == null)
+                        Sessions(answering = head?.id)
                     }
                     Status()
                 }
@@ -101,27 +106,7 @@ fun DashboardScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         MenuButton { settingsOpen = true }
                     }
-                    if (alone != null) {
-                        // The whole reason for the rail. On a phone lying on a desk you answer
-                        // this without picking it up, and a 40dp button asks you to aim.
-                        Button(
-                            onClick = {
-                                BuddyState.answer(alone.id, Verdict.ONCE, BuddyState.Source.APP, alone.session)
-                            },
-                            modifier = Modifier.fillMaxWidth().height(104.dp),
-                        ) { Text("Allow", style = MaterialTheme.typography.headlineSmall) }
-                        OutlinedButton(
-                            onClick = {
-                                BuddyState.answer(alone.id, Verdict.DENY, BuddyState.Source.APP, alone.session)
-                            },
-                            modifier = Modifier.fillMaxWidth().height(104.dp),
-                        ) { Text("Deny", style = MaterialTheme.typography.headlineSmall) }
-                    } else if (pending.size > 1) {
-                        Text(
-                            "${pending.size} waiting — answer each one beside its crab.",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                    if (head != null) Rail(head, behind = pending.size - 1)
                 }
             }
         } else {
@@ -133,7 +118,8 @@ fun DashboardScreen(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Sessions(withButtons = true)
+                    // No rail to belong to, so every stack answers itself.
+                    Sessions(answering = null)
                 }
                 Status()
             }
@@ -177,6 +163,61 @@ private fun LevelUpEffect() {
             Settings.setLastLevel(context, level)
             PetMood.show(PetState.CELEBRATE, 5)
         }
+    }
+}
+
+/**
+ * Everything still waiting, head first, minus whatever you just answered.
+ *
+ * A decision leaves for the bridge immediately; the snapshot that no longer carries it arrives
+ * afterwards. In between, the queue still holds a request that is already decided, and a rail
+ * offering Allow for something already allowed is the one lie this screen must not tell.
+ */
+@Composable
+private fun pendingNow(): List<Prompt> {
+    val answered = BuddyState.lastAnswer?.id
+    return BuddyState.snapshot?.pending.orEmpty().filter { it.id != answered }
+}
+
+/**
+ * The pair of buttons, and the one thing a queue makes them owe you: which crab they answer.
+ *
+ * Big enough to hit without aiming is the whole point of the rail, so a queue does not get to
+ * shrink them or send them away. Which crab they answer is said by the list rather than by a
+ * label here: whoever is being answered is at the top of it, wearing the accent. Naming the
+ * session instead was wrong — two sessions in the same checkout share a path.
+ *
+ * Everything else waiting is a layer of paper under its own crab, holding no buttons at all.
+ */
+@Composable
+private fun Rail(head: Prompt, behind: Int) {
+    // The queue advances the moment you answer, which puts a fresh request under a thumb that
+    // has not left the button yet. Nothing is answerable for a beat after the head changes —
+    // the cost is a blink, and what it buys is that no request is ever allowed by momentum.
+    var armed by remember(head.id) { mutableStateOf(false) }
+    LaunchedEffect(head.id) {
+        delay(400)
+        armed = true
+    }
+
+    // The whole reason for the rail. On a phone lying on a desk you answer this without
+    // picking it up, and a 40dp button asks you to aim.
+    Button(
+        onClick = { BuddyState.answer(head.id, Verdict.ONCE, BuddyState.Source.APP, head.session) },
+        enabled = armed,
+        modifier = Modifier.fillMaxWidth().height(104.dp),
+    ) { Text("Allow", style = MaterialTheme.typography.headlineSmall) }
+    OutlinedButton(
+        onClick = { BuddyState.answer(head.id, Verdict.DENY, BuddyState.Source.APP, head.session) },
+        enabled = armed,
+        modifier = Modifier.fillMaxWidth().height(104.dp),
+    ) { Text("Deny", style = MaterialTheme.typography.headlineSmall) }
+
+    if (behind > 0) {
+        Text(
+            if (behind == 1) "1 more behind it." else "$behind more behind it.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -244,12 +285,14 @@ private fun Status() {
  * The count on the line above answers "how many"; this answers "which ones are working", which
  * is the thing you actually scan for. Every crab gets a phase derived from its session id, so
  * a column of them does not blink in unison and stop looking like separate animals.
+ *
+ * Order comes from [rows]: asking first, in the order they will be answered.
  */
 @Composable
-private fun Sessions(withButtons: Boolean) {
+private fun Sessions(answering: String?) {
     val snapshot = BuddyState.snapshot ?: return
     val depth = Settings.pathDepth(LocalContext.current)
-    val pending = snapshot.pending
+    val pending = pendingNow()
 
     // A tick so moods expire on their own. The bridge speaks every ten seconds; a heart lasts
     // four, and waiting for the next snapshot to take it away would be most of its life.
@@ -262,36 +305,46 @@ private fun Sessions(withButtons: Boolean) {
     }
     val phoneNow = System.currentTimeMillis() / 1000
 
-    for (session in snapshot.sessions) {
-        val asking = pending.firstOrNull { it.session == session.id }
+    for (row in rows(snapshot, pending, BuddyState.lastAnswer?.session)) {
+        val session = row.session
+        val asks = row.asks
         Row(
             Modifier.fillMaxWidth().padding(bottom = 10.dp),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ClawdView(
-                // A tap outranks the bridge for a few seconds. Nothing depends on it, which
-                // is the point — this is the one thing on the screen that is just a pet.
-                state = PetMood.forSession(session.id, phoneNow)
-                    ?: Pet.sessionState(session, snapshot, BuddyState.lastAnswer, phoneNow),
-                // Fourteen cells across a smaller box put the laptop below one device pixel a
-                // cell, where it stopped being a laptop.
-                modifier = Modifier
-                    .width(84.dp)
-                    .height(68.dp)
-                    .clickable { PetMood.show(PetState.HEART, 4, session.id) },
-                phase = session.id.hashCode(),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(
-                    session.cwd.ifEmpty { session.id.take(8) }.let { shortPath(it, depth) },
-                    style = MaterialTheme.typography.bodyMedium,
+            if (session != null) {
+                ClawdView(
+                    // A tap outranks the bridge for a few seconds. Nothing depends on it, which
+                    // is the point — this is the one thing on the screen that is just a pet.
+                    state = PetMood.forSession(session.id, phoneNow)
+                        ?: Pet.sessionState(session, snapshot, BuddyState.lastAnswer, phoneNow),
+                    // Fourteen cells across a smaller box put the laptop below one device pixel
+                    // a cell, where it stopped being a laptop.
+                    modifier = Modifier
+                        .width(84.dp)
+                        .height(68.dp)
+                        .clickable { PetMood.show(PetState.HEART, 4, session.id) },
+                    phase = session.id.hashCode(),
                 )
-                if (asking != null) {
+            } else {
+                ClawdView(
+                    if (asks.first().tool == "Bash") PetState.BREAKER else PetState.ATTENTION,
+                    Modifier.width(84.dp).height(68.dp),
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                if (session != null) {
+                    Text(
+                        session.cwd.ifEmpty { session.id.take(8) }.let { shortPath(it, depth) },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                if (asks.isNotEmpty()) {
                     // The question belongs to this session, so it is asked here rather than by
                     // a second crab drawn at the top of the screen with nothing else to do.
-                    Bubble(asking, withButtons)
-                } else {
+                    Bubble(asks, roleOf(asks.first(), answering))
+                } else if (session != null) {
                     // What you asked for, above what it has been doing about it. An hour
                     // later this is the line that says whether an approval makes sense.
                     if (session.task.isNotEmpty()) {
@@ -305,54 +358,157 @@ private fun Sessions(withButtons: Boolean) {
             }
         }
     }
-
-    // Requests whose sessions the bridge never told us about — sessions that started before it
-    // did and have not called a tool since. Rare, and they must not swallow the one thing on
-    // this screen that cannot wait.
-    for (orphan in pending.filter { orphan -> snapshot.sessions.none { it.id == orphan.session } }) {
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ClawdView(
-                if (orphan.tool == "Bash") PetState.BREAKER else PetState.ATTENTION,
-                Modifier.width(84.dp).height(68.dp),
-            )
-            Column(Modifier.weight(1f)) { Bubble(orphan, withButtons) }
-        }
-    }
 }
 
-/** What the crab beside it is saying. */
+/**
+ * One line of the list: a session, everything it is asking, and where that puts it.
+ *
+ * [session] is null for a request whose session the bridge never told us about — one that
+ * started before the bridge did and has not called a tool since. Rare, and it must not be drawn
+ * anywhere but in the queue order like everything else.
+ */
+private class SessionRow(
+    val session: SessionSummary?,
+    val asks: List<Prompt>,
+    val rank: Int,
+)
+
+/** Not asking. Sorts below everything that is, and keeps the bridge's own order among its kind. */
+private const val NOT_ASKING = Int.MAX_VALUE
+
+/**
+ * The list in the order the rail will get to it: whoever is being answered on top.
+ *
+ * This is the whole explanation of which crab those buttons belong to. Naming the session above
+ * them cannot do it — two sessions in the same checkout is the ordinary case, and a path is not
+ * an identity. Position is unambiguous and needs no words.
+ *
+ * A session that has just been answered sinks to directly under the queue rather than back to
+ * wherever it started. It is the one you were looking at, and having it jump to the far end of
+ * the list the moment you decide loses the thread.
+ */
+private fun rows(
+    snapshot: Snapshot,
+    pending: List<Prompt>,
+    justAnswered: String?,
+): List<SessionRow> {
+    val queuePosition = HashMap<String, Int>()
+    pending.forEachIndexed { index, prompt -> queuePosition.putIfAbsent(prompt.session, index) }
+    val answered = justAnswered?.takeIf { it.isNotEmpty() }
+
+    val live = snapshot.sessions.map { session ->
+        SessionRow(
+            session = session,
+            // Every request this session has in the air, not just the first. Parallel tool
+            // calls are ordinary, and a request drawn nowhere is a request you cannot answer.
+            asks = pending.filter { it.session == session.id },
+            rank = queuePosition[session.id]
+                ?: if (session.id == answered) pending.size else NOT_ASKING,
+        )
+    }
+    val orphans = pending
+        .filter { orphan -> snapshot.sessions.none { it.id == orphan.session } }
+        .mapIndexed { index, orphan -> SessionRow(null, listOf(orphan), queuePosition[orphan.session] ?: index) }
+
+    // Stable, so sessions that are not asking stay in the order the bridge sent them and the
+    // list does not reshuffle under a thumb on every keepalive.
+    return (live + orphans).sortedBy { it.rank }
+}
+
+/** How a bubble is drawn, which is entirely a question of where its answer lives. */
+private enum class BubbleRole {
+    /** No rail on this layout: the bubble carries its own pair of buttons. */
+    STANDALONE,
+
+    /** The rail is answering this one, and wears the same colour to say so. */
+    ANSWERING,
+
+    /** Waiting its turn. Nothing here is pressable; the rail gets to it next. */
+    QUEUED,
+}
+
+private fun roleOf(prompt: Prompt, answering: String?): BubbleRole = when {
+    answering == null -> BubbleRole.STANDALONE
+    prompt.id == answering -> BubbleRole.ANSWERING
+    else -> BubbleRole.QUEUED
+}
+
+/**
+ * What the crab beside it is saying, and how much it still has to say.
+ *
+ * A stack rather than a card, because one session can have several tool calls in the air at
+ * once. The front bubble is the one being answered and every request behind it shows as an
+ * edge of paper under it: drawing only the first would hide a request completely, and drawing
+ * them all in full would bury the crab under its own queue.
+ */
 @Composable
-private fun Bubble(prompt: Prompt, withButtons: Boolean) {
-    val bubble = MaterialTheme.colorScheme.surfaceVariant
+private fun Bubble(asks: List<Prompt>, role: BubbleRole) {
+    val front = asks.first()
+    val behind = asks.size - 1
+    // The accent is the whole answer to "which crab do those buttons belong to". It is worth
+    // spending a colour on, and it is the only thing on this screen wearing it.
+    val bubble = when (role) {
+        BubbleRole.ANSWERING -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
     Row(verticalAlignment = Alignment.Top) {
         BubbleTail(bubble, Modifier.padding(top = 10.dp))
-        Surface(color = bubble, shape = RoundedCornerShape(6.dp)) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Can I run ${prompt.tool}?", style = MaterialTheme.typography.titleMedium)
-                // The bridge already trims this to 512 bytes, which is still a screenful of
-                // shell. Six lines is enough to recognise a command; the rest is in the
-                // terminal that wrote it, and a bubble that fills the display pushes the
-                // buttons off the bottom.
-                Text(
-                    prompt.hint,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 6,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (withButtons) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.ONCE, BuddyState.Source.APP, prompt.session)
-                        }) { Text("Allow") }
-                        OutlinedButton(onClick = {
-                            BuddyState.answer(prompt.id, Verdict.DENY, BuddyState.Source.APP, prompt.session)
-                        }) { Text("Deny") }
+        Column(Modifier.weight(1f)) {
+            Surface(
+                color = bubble,
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Can I run ${front.tool}?", style = MaterialTheme.typography.titleMedium)
+                    // What it is for, which is the half of the question the phone used to be
+                    // missing: the command says what will happen, this says why. Above the
+                    // command rather than below it, because it is the shorter read and the
+                    // one that decides most of these on its own.
+                    if (front.why.isNotEmpty()) {
+                        Text(front.why, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    // The bridge already trims this to 512 bytes, which is still a screenful of
+                    // shell. Six lines is enough to recognise a command; the rest is in the
+                    // terminal that wrote it, and a bubble that fills the display pushes the
+                    // buttons off the bottom. A queued one gets fewer still — it is not the
+                    // question in front of you yet.
+                    Text(
+                        front.hint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = if (role == BubbleRole.QUEUED) 3 else 6,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (role == BubbleRole.STANDALONE) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                BuddyState.answer(front.id, Verdict.ONCE, BuddyState.Source.APP, front.session)
+                            }) { Text("Allow") }
+                            OutlinedButton(onClick = {
+                                BuddyState.answer(front.id, Verdict.DENY, BuddyState.Source.APP, front.session)
+                            }) { Text("Deny") }
+                        }
                     }
                 }
+            }
+            // Two edges at most. Past that the stack stops counting and says the number, the
+            // way a deck of cards does not get visibly deeper after the first few.
+            for (layer in 1..minOf(behind, 2)) {
+                Surface(
+                    color = bubble.copy(alpha = 0.55f / layer),
+                    shape = RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp),
+                    modifier = Modifier
+                        .padding(horizontal = (6 * layer).dp)
+                        .fillMaxWidth()
+                        .height(5.dp),
+                ) {}
+            }
+            if (behind > 2) {
+                Text(
+                    "$behind more from this session.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }

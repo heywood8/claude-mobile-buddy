@@ -26,6 +26,12 @@ data class Prompt(
     val session: String = "",
     val tool: String,
     val hint: String,
+    /**
+     * What the call is for, in Claude's own words — the line the terminal prints under the
+     * command. Defaulted: most tools carry no such field, and a bridge older than this one
+     * sends no snapshot that has it.
+     */
+    val why: String = "",
     val cwd: String = "",
     /** Wall-clock second at which the bridge gives up, so we can show a countdown. */
     val expires: Long = 0,
@@ -106,9 +112,9 @@ data class Snapshot(
     /**
      * Everything waiting, head first.
      *
-     * The wire keeps the head apart because the notification is about that one; on screen the
-     * distinction does not exist, since each request is drawn beside the session that raised
-     * it and there is no queue to be at the front of.
+     * The wire keeps the head apart because the notification is about that one. On screen the
+     * order matters for the same reason: each request is drawn beside the session that raised
+     * it, but only the head is answerable, and the head is what the rail's buttons mean.
      */
     val pending: List<Prompt> get() = if (prompt == null) prompts else listOf(prompt) + prompts
 }
