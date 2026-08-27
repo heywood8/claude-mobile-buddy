@@ -33,6 +33,10 @@ actor Coordinator {
     /// through half a minute to watch the queue let go.
     nonisolated let linkGrace: TimeInterval
 
+    /// How long this bridge lets a session stay silent. Injected so tests need not sit through
+    /// six hours to watch one go.
+    nonisolated let sessionIdle: TimeInterval
+
     /// Tools whose permission prompt cannot be usefully answered from a phone.
     ///
     /// Approving AskUserQuestion does not answer the question — it only lets the terminal ask
@@ -47,6 +51,13 @@ actor Coordinator {
     /// Longer than a reconnect takes and far shorter than the window, so a flicker costs a few
     /// seconds of nothing and a phone genuinely left behind still fails open.
     static let defaultLinkGrace: TimeInterval = 30
+
+    /// How long a session may say nothing before it is forgotten.
+    ///
+    /// Hours rather than minutes, because a session parked overnight is not dead — it is the
+    /// one you come back to. Six of them, so a terminal killed after lunch is gone by bedtime
+    /// instead of at the next restart, which under launchd can be weeks away.
+    static let defaultSessionIdle: TimeInterval = 6 * 60 * 60
 
     private struct Pending {
         let id: String
@@ -97,13 +108,15 @@ actor Coordinator {
         log: Logger,
         window: TimeInterval = Coordinator.defaultWindow,
         skippedTools: Set<String> = Coordinator.defaultSkippedTools,
-        linkGrace: TimeInterval = Coordinator.defaultLinkGrace
+        linkGrace: TimeInterval = Coordinator.defaultLinkGrace,
+        sessionIdle: TimeInterval = Coordinator.defaultSessionIdle
     ) {
         self.link = link
         self.log = log
         self.window = window
         self.skippedTools = skippedTools
         self.linkGrace = linkGrace
+        self.sessionIdle = sessionIdle
     }
 
     // MARK: - Session bookkeeping
@@ -202,6 +215,34 @@ actor Coordinator {
             // "the hook fired and the phone is not showing it" without guessing.
             log.info("session \(id.prefix(8)) seen at \(cwd)")
             sessions[id] = Session(cwd: cwd, started: now, active: now, decided: 0)
+        }
+    }
+
+    /// Forgets the sessions nothing has been heard from, on the keepalive tick.
+    ///
+    /// `sessionEnded` is the tidy way out and it does not always run: a terminal that is
+    /// closed, killed, or whose laptop shuts its lid sends no `SessionEnd` at all. What it
+    /// leaves behind is counted in `total`, drawn on the phone, and never removed — and this
+    /// bridge runs under launchd for weeks at a time.
+    ///
+    /// Silence is measured from the newest of `active`, `decided` and `finished`, so a session
+    /// is judged on what it last did rather than on when it started. One pruned by mistake is
+    /// learned back by `touch` the moment it speaks, which is what makes a guessed threshold
+    /// safe to act on.
+    private func pruneIdleSessions() {
+        let now = Self.now()
+        let cutoff = now - Int(sessionIdle)
+        for (id, session) in sessions {
+            let last = max(session.active, session.decided, session.finished)
+            guard last <= cutoff else { continue }
+            sessions[id] = nil
+            log.info("session \(id.prefix(8)) pruned — nothing heard for \(now - last) s")
+            // The same reasoning as sessionEnded: nobody is left to run whatever it was
+            // asking about. Rare, because the window runs out hours before the threshold
+            // does, and cheap enough not to leave to that arithmetic.
+            for pending in queue where pending.sessionID == id {
+                withdraw(pending.id, reason: "its session went silent")
+            }
         }
     }
 
@@ -356,7 +397,9 @@ actor Coordinator {
         }
     }
 
+    /// The ten-second tick: forget whatever has gone quiet, then say where things stand.
     func keepalive() {
+        pruneIdleSessions()
         if link.isLinked { pushSnapshot() }
     }
 

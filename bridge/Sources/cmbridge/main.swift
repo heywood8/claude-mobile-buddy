@@ -34,6 +34,8 @@ let usePNG = takeFlag("--png")
 let settingsPath = takeValue("--settings").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
 let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
+let sessionIdle = takeValue("--session-idle").flatMap(TimeInterval.init)
+    ?? Coordinator.defaultSessionIdle
 let skippedTools: Set<String> = takeValue("--skip-tools")
     .map { Set($0.split(separator: ",").map(String.init)) } ?? Coordinator.defaultSkippedTools
 
@@ -147,6 +149,8 @@ case "print-agent":
     \t\t<string>\(port)</string>
     \t\t<string>--window</string>
     \t\t<string>\(Int(window))</string>
+    \t\t<string>--session-idle</string>
+    \t\t<string>\(Int(sessionIdle))</string>
     \t</array>
     \t<key>RunAtLoad</key>
     \t<true/>
@@ -203,7 +207,8 @@ case "run", nil:
     let link = SecureLink(transport: transport, identity: identity, log: log)
     log.info("approval window \(Int(window) / 60) min \(Int(window) % 60) s")
     let coordinator = Coordinator(
-        link: link, log: log, window: window, skippedTools: skippedTools)
+        link: link, log: log, window: window, skippedTools: skippedTools,
+        sessionIdle: sessionIdle)
 
     link.onLine = { line in
         do {
@@ -264,9 +269,11 @@ default:
     print("""
     cmbridge — Claude Code approvals on your phone
 
-      cmbridge run [--port N] [--window SECONDS] [--skip-tools A,B]
-                                       run the bridge (port 8787, window 30 min;
-                                       AskUserQuestion and ExitPlanMode stay in the terminal)
+      cmbridge run [--port N] [--window SECONDS] [--session-idle SECONDS]
+                   [--skip-tools A,B]
+                                       run the bridge (port 8787, window 30 min, a session
+                                       forgotten after 6 h of silence; AskUserQuestion and
+                                       ExitPlanMode stay in the terminal)
       cmbridge pair [--png] [--rotate] [--url]
                                        show the pairing code; --png opens an image
                                        instead of drawing it in the terminal
@@ -276,7 +283,7 @@ default:
                                        showing the diff and asking first
       cmbridge print-hook [--port N] [--window SECONDS]
                                        print the snippet instead of merging it
-      cmbridge print-agent [--port N] [--window SECONDS]
+      cmbridge print-agent [--port N] [--window SECONDS] [--session-idle SECONDS]
                                        print the LaunchAgent plist to install
 
     The bridge edits neither ~/.claude/settings.json nor ~/Library/LaunchAgents.

@@ -107,3 +107,205 @@ since the manifest uses `swiftLanguageMode`.
   hand on the Pixel.
 - Coverage badges, as in the scaffold project.
 - Maestro or equivalent UI flows.
+
+## Review notes, 2026-08-27
+
+A pass over both ends with the question "what would make this pleasanter to use". Grouped by
+size rather than by side. The `why` field and the BLE connect timeout in the working tree at
+the time of the pass are assumed landed.
+
+Each item ends with a *Where / Wire / Done when* block, so that one can be picked up cold.
+Two rules apply to all of them:
+
+- Anything that changes what goes over the air — a field in `Snapshot`, `Prompt` or
+  `Decision` — is edited in three places at once: `docs/PROTOCOL.md`,
+  `bridge/Sources/cmbridge/Protocol.swift`, `android/.../Protocol.kt`. New fields get a
+  default on the reading side, so a peer built before the field still decodes (the Kotlin
+  side already does this with `= ""` / `= 0`; Swift needs `decodeIfPresent` or an optional).
+  `docs/protocol/fixtures/vectors.json` pins ciphertexts for fixed plaintexts and does not
+  need regenerating for a new field; it needs regenerating only if the sealed *bytes* change,
+  which a schema addition does not cause.
+- Anything that changes what the bridge sends back to Claude Code lives in `HookResponse`
+  (`bridge/Sources/cmbridge/HookIO.swift`) and is covered by a case in
+  `bridge/Tests/cmbridgeTests/QueueTests.swift`.
+
+### Small, self-contained
+
+- **Countdown from `expires`.** The protocol carries `prompt.expires` "so the phone can render
+  a countdown rather than a spinner", and neither the dashboard nor the notification reads it.
+  The notification gets it for free: `setWhen(expires * 1000)`, `setUsesChronometer(true)`,
+  `setChronometerCountDown(true)`. The bubble gets a line — "the terminal takes over in
+  27 min" — which is also the only place the half-hour window is ever explained to the user.
+
+  *Where:* `Notifications.kt` `approval()`; `DashboardScreen.kt` `Bubble()`, only for
+  `BubbleRole.ANSWERING` / `STANDALONE`. Compute against `Snapshot.now`, not the phone's
+  clock — the phone-side convention is that durations are worked out in the host's frame.
+  *Wire:* none; `expires` and `now` already exist.
+  *Done when:* the shade shows a live countdown that reaches zero at `expires`; the bubble
+  shows the remaining minutes and re-renders with each keepalive; `expires == 0` (an older
+  bridge) shows neither.
+
+- **`cmbridge status` does not know whether a phone is linked.** It reports the identity, the
+  port, the hooks, and nothing about the link — which is the first question when the phone is
+  quiet.
+
+  *Where:* `HookServer.swift` `/health` (currently `{"ok":true}`); `main.swift` `case
+  "status"` and `probe()`. `Coordinator` already knows `link.isLinked` and `queueDepth`; it
+  needs a device name, which arrives in the phone's `ready` frame — `SecureLink.swift` is
+  where it is parsed and dropped today.
+  *Wire:* none over BLE. The local HTTP body becomes
+  `{"ok":true,"linked":<bool>,"device":"<model or empty>","waiting":<int>,"since":<unix or 0>}`.
+  *Done when:* `status` prints a `Phone     :` line reading `linked (Pixel 9) since 10:42,
+  0 waiting` or `not linked`; existing `"ok"` substring check in `probe()` keeps passing.
+
+- **`PostToolUse` matcher is narrower than `PermissionRequest`.** The installer sets
+  `Bash|Write|Edit|Task` on the post-tool hooks, while the permission hook fires for every
+  tool. A `MultiEdit`, `NotebookEdit` or `WebFetch` allowed in the terminal produces no
+  `PostToolUse` the bridge hears, so the card sits on the phone until the turn ends.
+
+  *Where:* `HookInstaller.swift` `hooks(window:)` — drop `matcher` on `PostToolUse` and
+  `PostToolUseFailure`; `Coordinator.recordToolUse` — keep calling `resolveElsewhere` for
+  every tool, but only `entries.insert` for the set that used to be matched (make it a
+  static list next to `defaultSkippedTools`). `HookInstallerTests.swift` has the snippet
+  pinned and will need its expectation updated.
+  *Wire:* none.
+  *Done when:* a `WebFetch` request allowed in the terminal disappears from the phone on the
+  tool's `PostToolUse`, and the recent-calls feed still shows only Bash/Write/Edit/Task.
+  Re-running `install-hook` replaces the old matched entry rather than appending (the
+  `isOurs` merge already keys on the URL, so this should be free — verify it).
+
+### Bugs that read as UX
+
+- **A notification tap with no service behind it goes nowhere.** `DecisionReceiver` hands
+  the verdict to `BuddyState.sink`, which is null whenever the service is not up, and the
+  only trace is a log line.
+
+  *Where:* `DecisionReceiver.kt`, `BuddyState.answer()`. Minimum: when `sink == null`, post
+  a toast "Not connected to the bridge" and leave the notification up. Better: call
+  `BuddyLauncher.resume(context, "notification tap")` first, then the toast only if the sink
+  is still null — the request itself is in the bridge's queue for up to half an hour, so the
+  next snapshot re-raises the notification and the tap can be repeated.
+  *Wire:* none.
+  *Done when:* with the service stopped, tapping Allow on a stale notification produces a
+  visible message and does not silently cancel the notification.
+
+### Features
+
+- **Allow for the rest of the session.** Two verdicts exist, `once` and `deny`. The
+  `PermissionRequest` hook response accepts `updatedPermissions` next to `allow`, and that is
+  what a third button would send: "allow `git push` until this session ends". Most repeat
+  buzzes in an evening are the same command with a different argument.
+
+  Documented response shape (hooks reference, checked 2026-08-27):
+
+  ```json
+  {"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{
+    "behavior":"allow",
+    "updatedPermissions":[{"type":"allow","rules":["Bash(git push:*)"],
+                            "behavior":"allow","destination":"session"}]}}}
+  ```
+
+  `destination` is `"session"` or `"user"`; use `"session"` only — writing into the user's
+  settings from a phone tap is not a decision this button should be able to make. The rule
+  string follows the `permissions.allow` syntax.
+
+  *Where:* `Protocol.kt` / `Protocol.swift` — `Verdict` gains `session` (`"session"` on the
+  wire). `HookIO.swift` — `HookResponse.allow(rules: [String])` and a
+  `HookRequest.permissionRule` derived from `tool_input`: for `Bash`, `Bash(<first word>:*)`
+  — two words when the first is `git`, `npm`, `docker`, `make`, `gh`, `cargo`, `go`;
+  for `Write`/`Edit`, `Edit(<file_path>)`; for anything else, `<Tool>` alone. Show the derived
+  rule on the phone — put it in `Prompt` as `rule` — so the button says what it grants:
+  "Allow `git push:*` this session". `Notifications.kt` — third action (three is the
+  platform maximum, and it is the last slot). `DashboardScreen.kt` `Rail()` and `Bubble()`
+  — a third button, visually weaker than Allow. `Journal.kt` — `outcome` gains `"session"`;
+  `HistoryScreen.label()` renders it.
+  *Wire:* `Decision.decision` accepts `"session"`; `Prompt.rule: String = ""`. PROTOCOL.md
+  decision table gets a third row. An old bridge receiving `"session"` fails to decode the
+  verdict: `LineCodec.decode` throws `unrecognised`, `main.swift` logs "bad line from phone"
+  and the link stays up — so the tap is lost, not the session. Acceptable for a
+  phone-newer-than-bridge mismatch; nothing to add.
+  *Done when:* tapping the third button unblocks the terminal, the same command in the same
+  session no longer reaches the phone, a new session asks again, and `~/.claude/settings.json`
+  is untouched. A `QueueTests` case pins the response JSON; a `HookIO` test pins the rule
+  derivation for the listed tools.
+
+- **Deny with a note.** `HookResponse.deny("Denied from phone")` is text the model reads.
+  A denial that carries a sentence — "not until the tests pass" — turns the phone from a
+  switch into a steering channel.
+
+  *Where:* `Protocol.kt` / `Protocol.swift` — `Decision.note: String = ""`, capped at
+  200 bytes on the phone (same byte-clamp idea as `Prompt.whyLimit`). `Coordinator.resolve`
+  passes it through; `HookResponse.deny(message)` becomes `"Denied from phone: <note>"` when
+  non-empty, unchanged when empty. `Notifications.kt` — `RemoteInput` on the Deny action
+  (`setAuthenticationRequired` stays); `DecisionReceiver` reads
+  `RemoteInput.getResultsFromIntent`. `DashboardScreen.kt` — long-press on Deny opens a
+  small sheet with a text field and three preset chips ("run the tests first", "ask me in the
+  terminal", "not this file"); plain tap stays a plain deny. `Journal.Entry` gains `note`.
+  *Wire:* `Decision` gains an optional `note`; the bridge must accept its absence. PROTOCOL.md
+  decision section shows the field.
+  *Done when:* a denial with a note appears in the terminal as the deny message and Claude's
+  next turn visibly reacts to it; a denial without a note is byte-identical to today's.
+
+- **Ping when a turn ends.** The `Stop` hook already reaches the bridge and sets
+  `session.finished`; the phone shows it and stays silent. Opt-in, low-importance — the
+  reason one walks away from the laptop in the first place. Claude Code's `Notification`
+  hook (`idle_prompt`: a session has waited a minute for input) is the same idea from the
+  other side.
+
+  *Where:* phone only for the `Stop` half — `BuddyService.onSnapshot` compares each
+  session's `finished` with the previous snapshot's; a `0 → non-zero` transition on a session
+  raises a notification on a new channel `CHANNEL_DONE` (`IMPORTANCE_DEFAULT`, no vibration
+  by default), title "Finished", text `shortPath(cwd)` + `task`, id derived from the session
+  id so several sessions do not overwrite each other. `Settings.kt` — `pingWhenDone`,
+  default off, switch in the dashboard's settings sheet next to "Light up the screen".
+  Suppressed while `BuddyState.foreground`. For the `idle_prompt` half: `HookInstaller` gains
+  `Hook(event: "Notification", path: "notification", matcher: "idle_prompt")`;
+  `HookServer` routes it to `Coordinator.noteIdle(sessionID)`, which sets a new
+  `SessionSummary.idle: Int` stamp; the phone treats it like `finished`.
+  *Wire:* `SessionSummary.idle: Long = 0` for the second half only.
+  *Done when:* with the toggle on and the app in the background, a session finishing its turn
+  produces one notification naming the project; toggling off produces none; the approval
+  channel is unaffected.
+
+- **A risk class on the prompt.** The bridge tags the request from `hint` and the phone draws
+  a high-risk request differently. Aimed at the thumb that taps without reading; it is the
+  same failure the unlock requirement guards against, one layer up.
+
+  *Where:* `HookIO.swift` — `HookRequest.risk: String`, `""` or `"high"`, from a static
+  list of patterns over the raw command (not the truncated hint): `rm -rf`, `rm -r`,
+  `git push --force` / `-f`, `git reset --hard`, `git clean`, `sudo`, `| sh`, `| bash`,
+  `curl … | `, `chmod -R`, `> /dev/`, `mkfs`, `dd if=`; for Write/Edit, a path outside `cwd`
+  and outside `~/.claude`. Patterns live in one array with a test each. `Prompt.risk`.
+  Phone: `Bubble()` uses `errorContainer` for the bubble colour and prefixes the title with
+  "Careful:"; `Notifications.approval` uses a second channel `CHANNEL_APPROVAL_RISKY` with its
+  own vibration pattern, so the user can tell them apart by feel and tune them separately.
+  The in-app Allow for a risky request is disabled for the first second after the bubble
+  appears — long enough to break a reflex, short enough not to annoy.
+  *Wire:* `Prompt.risk: String = ""`.
+  *Done when:* `rm -rf build` reaches the phone red, buzzes differently, and its Allow is
+  briefly inert; `ls` is unchanged; every pattern has a `HookIO` test; nothing here changes
+  what the bridge answers — the class is advice, never a decision.
+
+- **A diff for Edit and Write.** `HookRequest.summarise` reduces an Edit to its `file_path`,
+  so the phone is asked to approve "Edit App.js" and nothing more.
+
+  *Where:* `HookIO.swift` `summarise()`. For `Edit`: `<file_path>\n−<old lines> +<new lines>`
+  followed by the first three lines of `new_string`; for `Write`: `<file_path>\n<line count>
+  lines` and the first three lines of `content`; for `MultiEdit`: the path and the number of
+  edits. All within the existing 512-byte `hintLimit` — the clamp already handles overflow.
+  Keep the `PostToolUse` side in mind: `resolveElsewhere` matches the shown hint against the
+  reported one with `sameCommand`, which is a prefix test — the reported hint for the same
+  edit must be produced by the same function, so this stays consistent by construction, but
+  add a test that a PermissionRequest hint and the matching PostToolUse hint still match.
+  *Wire:* none; `hint` is free text.
+  *Done when:* an Edit request on the phone shows the file, the line delta and a glimpse of
+  the new text; the stale-card clearing on `PostToolUse` still works for Edit and Write
+  (covered by a `QueueTests` case).
+
+### Looked at and left alone
+
+- Token cost in currency. The transcript format carries no guarantee and the token figures
+  are already the one part of the snapshot allowed to be wrong; a price on top of them
+  doubles the surface for being wrong about decoration.
+- Everything already recorded above — multiple hosts, Wear OS, PAKE, the species picker.
+  The reasoning there still holds.
