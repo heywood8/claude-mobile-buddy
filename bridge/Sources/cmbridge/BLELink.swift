@@ -26,6 +26,13 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
     private var writeGeneration: UInt64 = 0
     private static let writeTimeout: TimeInterval = 10
 
+    /// The same trick for the connect attempt: a timeout armed for a peripheral we have
+    /// since let go of must not tear down the one that replaced it.
+    private var connectGeneration: UInt64 = 0
+    /// Covers connecting *and* discovering, because a peripheral stuck halfway through either
+    /// is latched just as hard as one stuck at the start.
+    private static let connectTimeout: TimeInterval = 15
+
     private let lock = NSLock()
     private var _isLinked = false
 
@@ -112,7 +119,11 @@ final class BLELink: NSObject, LinkSink, @unchecked Sendable {
         central.scanForPeripherals(withServices: [CBUUID(string: NUS.service)])
     }
 
+    /// Nothing latched means nothing to tear down. One drop reaches us as several things at
+    /// once — a disconnect callback, a watchdog, a controller going away — and one
+    /// "link down" per drop is the honest count.
     private func teardown(_ reason: String) {
+        guard peripheral != nil else { return }
         log.info("link down: \(reason)")
         pendingWrites.removeAll()
         writeInFlight = false
@@ -139,6 +150,12 @@ extension BLELink: CBCentralManagerDelegate {
         default:
             log.info("bluetooth state: \(central.state.rawValue)")
         }
+
+        // A controller that goes down invalidates every peripheral it handed out, and one that
+        // was still connecting gets no disconnect callback of any shape — so the peripheral
+        // stays latched and `didDiscover` drops every advertisement that follows. That is how
+        // the bridge spent an hour and a half scanning for a phone in the same room.
+        if central.state != .poweredOn { teardown("controller went away") }
     }
 
     func centralManager(_ central: CBCentralManager,
@@ -152,6 +169,19 @@ extension BLELink: CBCentralManagerDelegate {
         peripheral.delegate = self
         central.stopScan()
         central.connect(peripheral)
+
+        // `connect` has no timeout of its own and no obligation to ever answer. An attempt
+        // that neither lands nor fails leaves the peripheral latched with the scan stopped,
+        // and the guard above then swallows every later advertisement in silence. Scanning
+        // forever while deaf looks exactly like scanning.
+        connectGeneration &+= 1
+        let generation = connectGeneration
+        queue.asyncAfter(deadline: .now() + Self.connectTimeout) { [weak self] in
+            guard let self, self.connectGeneration == generation,
+                  let pending = self.peripheral, !self.isLinked else { return }
+            self.central.cancelPeripheralConnection(pending)
+            self.teardown("no link \(Int(Self.connectTimeout))s after discovery")
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
