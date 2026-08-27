@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.6.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.5.0...android-v0.6.0) (2026-08-27)
+
+
+### Features
+
+* **android:** a crab per session, and an icon at last ([fc812ef](https://github.com/heywood8/claude-mobile-buddy/commit/fc812ef71d86d5826b0f636d681a0e830334e989))
+* **android:** a queue no longer takes the rail away ([e2df41c](https://github.com/heywood8/claude-mobile-buddy/commit/e2df41c6831832531ccac70cddb79320e98257ab))
+* **android:** come back without being asked ([d274b15](https://github.com/heywood8/claude-mobile-buddy/commit/d274b15a013eb0994b2b2a28c7a8a6606c6806d1))
+* **android:** give it a pixel crab ([3ca162f](https://github.com/heywood8/claude-mobile-buddy/commit/3ca162f6abd86db3443bb7d06cacc7504646d27c))
+* **android:** let a request light up the screen ([68397d0](https://github.com/heywood8/claude-mobile-buddy/commit/68397d09bb0e1a5b107e695a471fd22ded725cb8))
+* **android:** let the crab do the asking ([a397b1c](https://github.com/heywood8/claude-mobile-buddy/commit/a397b1c0765834dce5f291d1f9dc8b1464739d08))
+* **android:** move the call log off the dashboard ([9f179dd](https://github.com/heywood8/claude-mobile-buddy/commit/9f179ddc8c0c3ea4aeebfcbfa71eeca2c1f87e99))
+* **android:** pin the status to the floor, and make the laptop visible ([5c6b604](https://github.com/heywood8/claude-mobile-buddy/commit/5c6b604379ce803ca3f09d5e52ad5516c8c1f1ba))
+* **android:** put pauldrons on the breaker ([1289a6b](https://github.com/heywood8/claude-mobile-buddy/commit/1289a6b4cd1ebad25249771f6e2f3e79bcd514d4))
+* **android:** shrink the release build, and start the service once ([e5fc80a](https://github.com/heywood8/claude-mobile-buddy/commit/e5fc80ab491421e307d1f7ac80995455fb7ac7c1))
+* **android:** sit it at a laptop, and give it a real page to wave ([61202f5](https://github.com/heywood8/claude-mobile-buddy/commit/61202f53933ee794f5c64a061449cdcdfd98d6aa))
+* **android:** ten more trades, and horns for a shell command ([04254d7](https://github.com/heywood8/claude-mobile-buddy/commit/04254d7f5d6502e8574122a955a0cd00f257f6f3))
+* **android:** three animations per state, one trade per crab ([31078c7](https://github.com/heywood8/claude-mobile-buddy/commit/31078c7c1efedda780d3c0eb62432a850f4ce2b5))
+* **bridge:** forget a terminal that never said goodbye ([#6](https://github.com/heywood8/claude-mobile-buddy/issues/6)) ([c84e814](https://github.com/heywood8/claude-mobile-buddy/commit/c84e8144c82f0dec234328b7ee9877965b4755dd))
+* count the tokens each session has spent ([8aa5e69](https://github.com/heywood8/claude-mobile-buddy/commit/8aa5e69f25b272b8d707a57bc8bf4424300f53c9))
+* four more moods, and shorter paths ([be17795](https://github.com/heywood8/claude-mobile-buddy/commit/be17795c09f9015ca12477b334bc2da2511854ed))
+* several requests at once, and a crab you can poke ([3223b54](https://github.com/heywood8/claude-mobile-buddy/commit/3223b54c39691302243e80a03491d48b858bc183))
+* the question comes from the session that is asking ([eafe218](https://github.com/heywood8/claude-mobile-buddy/commit/eafe21865556f997d5220f6d16582b3d298d5c6c))
+
+
+### Bug Fixes
+
+* **android:** four legs, a crest, and gold in the mouth ([a62f21c](https://github.com/heywood8/claude-mobile-buddy/commit/a62f21c0f7a79434ae4052b86b8a45036461434c))
+* **android:** give the breaker room for a face, and take the gold out of his mouth ([51c2cd2](https://github.com/heywood8/claude-mobile-buddy/commit/51c2cd2bc530bd1c6a04e7e7c9800e3b20c6d94b))
+* **android:** keep the jump inside the box ([a380f49](https://github.com/heywood8/claude-mobile-buddy/commit/a380f494339ac04e413c34d5b44e8df6a310e5fa))
+* **android:** make the breaker look like the breaker ([4618878](https://github.com/heywood8/claude-mobile-buddy/commit/46188785221fe5e85f7db4fb727fec97dd0e226a))
+* **android:** thicken the horns ([a870ca2](https://github.com/heywood8/claude-mobile-buddy/commit/a870ca250f1687ba7699130b4390ad583420a635))
+* **android:** two fangs, no legs ([f78dd2f](https://github.com/heywood8/claude-mobile-buddy/commit/f78dd2f9c535814b3051478a13f4e19d99c28eeb))
+
 ## [0.5.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.4.0...android-v0.5.0) (2026-08-26)
 
 

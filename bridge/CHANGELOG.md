@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.5.0...bridge-v0.6.0) (2026-08-27)
+
+
+### Features
+
+* **bridge:** forget a terminal that never said goodbye ([#6](https://github.com/heywood8/claude-mobile-buddy/issues/6)) ([c84e814](https://github.com/heywood8/claude-mobile-buddy/commit/c84e8144c82f0dec234328b7ee9877965b4755dd))
+* **bridge:** say which hooks are actually installed ([5c9dcad](https://github.com/heywood8/claude-mobile-buddy/commit/5c9dcad9f5fe6deba70e0b6ca19181b75c800ddc))
+* **bridge:** send the reason a call is being made, not just the command ([21873b0](https://github.com/heywood8/claude-mobile-buddy/commit/21873b03c06ef8d2c6f51334df9ea1a52221b135))
+* **bridge:** tell the phone what the terminal decided ([5fef88c](https://github.com/heywood8/claude-mobile-buddy/commit/5fef88caba7dbeca33a0f4205050530653fe4ec6))
+* count the tokens each session has spent ([8aa5e69](https://github.com/heywood8/claude-mobile-buddy/commit/8aa5e69f25b272b8d707a57bc8bf4424300f53c9))
+* four more moods, and shorter paths ([be17795](https://github.com/heywood8/claude-mobile-buddy/commit/be17795c09f9015ca12477b334bc2da2511854ed))
+* several requests at once, and a crab you can poke ([3223b54](https://github.com/heywood8/claude-mobile-buddy/commit/3223b54c39691302243e80a03491d48b858bc183))
+* the question comes from the session that is asking ([eafe218](https://github.com/heywood8/claude-mobile-buddy/commit/eafe21865556f997d5220f6d16582b3d298d5c6c))
+
+
+### Bug Fixes
+
+* **bridge:** answer the waiting hooks before exiting ([08e6a55](https://github.com/heywood8/claude-mobile-buddy/commit/08e6a5528902417cd06beea1f33ed16919af095a))
+* **bridge:** do not hand the queue to the terminal over a flicker ([41b7384](https://github.com/heywood8/claude-mobile-buddy/commit/41b7384ae41d1649176ed00040f8aea0a09468a4))
+* **bridge:** drop a request the terminal has already answered ([7515878](https://github.com/heywood8/claude-mobile-buddy/commit/7515878bed05f90f9c3182b4979d92d5d5a55eb0))
+* **bridge:** install every hook, not the four it used to know ([80c2a0a](https://github.com/heywood8/claude-mobile-buddy/commit/80c2a0a46391d601458eca91abe63fd183058374))
+* **bridge:** let go of a peripheral the controller took away ([31afd41](https://github.com/heywood8/claude-mobile-buddy/commit/31afd41d3ac7599e8fb17664090f5e75dd3d90c5))
+* count new tokens, and count them once ([2eab1bd](https://github.com/heywood8/claude-mobile-buddy/commit/2eab1bd68ea8d969285913abd85f70b057c9563d))
+
 ## [0.5.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.4.0...bridge-v0.5.0) (2026-08-26)
 
 
