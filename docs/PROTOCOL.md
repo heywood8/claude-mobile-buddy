@@ -238,9 +238,15 @@ would be invisible in the code and wrong in the display.
 from any hook that names one, not only `SessionStart`: a bridge restarted mid-session would
 otherwise never hear about the sessions already running.
 
+They leave the same way. `SessionEnd` is the tidy exit, and a terminal that is closed, killed or
+carried out of range sends none — so a session from which nothing at all has arrived for six
+hours is dropped from the next snapshot as well, and the phone's counts fall with it. The
+threshold is set with `cmbridge run --session-idle SECONDS`. One dropped early comes back on its
+next hook, since that is all it takes to learn a session.
+
 | Field | Source |
 |---|---|
-| `total`, `running` | `SessionStart` / `SessionEnd` hooks |
+| `total`, `running` | `SessionStart` / `SessionEnd` hooks, less what has gone silent |
 | `waiting` | depth of the bridge's approval queue |
 | `msg` | short status line |
 | `entries` | recent tool calls, from `PostToolUse`, host-formatted with the host's clock |

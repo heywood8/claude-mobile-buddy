@@ -288,13 +288,48 @@ struct QueueTests {
         _ = await bare.value
     }
 
+    @Test("forgets a session that has gone quiet and keeps the one still talking")
+    func prunesSilentSessions() async throws {
+        let link = FakeLink()
+        // Two seconds stands in for six hours. Session stamps are whole seconds, so the gap
+        // has to be wide enough that no boundary can put the two sessions on the same side
+        // of it.
+        let coordinator = Coordinator(link: link, log: Logger(), sessionIdle: 2)
+
+        await coordinator.sessionStarted("here", cwd: "/tmp/here")
+        // A terminal killed with a request outstanding: the hook is still holding the socket
+        // open, and no SessionEnd is ever coming to say so.
+        let stranded = Task {
+            await coordinator.decide(request(tool: "Bash", hint: "one", session: "gone"))
+        }
+        try await settle { await coordinator.queueDepth == 1 }
+
+        try await Task.sleep(nanoseconds: 2_200_000_000)
+        await coordinator.recordToolUse(
+            sessionID: "here", cwd: "/tmp/here", tool: "Bash", hint: "ls")
+        await coordinator.keepalive()
+
+        // The one that spoke a moment ago survives its silent neighbour, and the hook the
+        // silent one left behind is released rather than held to its full window.
+        let snapshot = try #require(link.lastSnapshot)
+        #expect(snapshot.sessions.map(\.id) == ["here"])
+        #expect(snapshot.total == 1)
+        #expect(await stranded.value.isNoDecision)
+        #expect(await coordinator.queueDepth == 0)
+    }
+
     // MARK: - Helpers
 
-    private func request(tool: String, hint: String, why: String = "") -> HookRequest {
+    private func request(
+        tool: String,
+        hint: String,
+        why: String = "",
+        session: String = "test"
+    ) -> HookRequest {
         var input: [String: Any] = ["command": hint]
         if !why.isEmpty { input["description"] = why }
         let body: [String: Any] = [
-            "session_id": "test",
+            "session_id": session,
             "cwd": "/tmp/project",
             "hook_event_name": "PermissionRequest",
             "tool_name": tool,
