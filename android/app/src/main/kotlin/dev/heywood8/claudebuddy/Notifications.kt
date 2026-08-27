@@ -68,7 +68,18 @@ object Notifications {
             // that did nothing.
             .apply { if (waiting > 1) setSubText("1 of $waiting") }
             .setContentText(prompt.hint)
-            .setStyle(Notification.BigTextStyle().bigText("${prompt.hint}\n\n${prompt.cwd}"))
+            // why goes above the command, the same order the bubble uses, because it is the
+            // shorter read and usually the one that settles the question. Assembled from the
+            // parts that are there rather than interpolated: why is empty for every tool that
+            // has no description to give, and cwd defaults to empty too — either one written
+            // in blind leaves a gap where a line should be.
+            .setStyle(
+                Notification.BigTextStyle().bigText(
+                    listOf(prompt.why, prompt.hint, prompt.cwd)
+                        .filter { it.isNotEmpty() }
+                        .joinToString("\n\n"),
+                ),
+            )
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setCategory(Notification.CATEGORY_CALL)
             .setOnlyAlertOnce(true)
