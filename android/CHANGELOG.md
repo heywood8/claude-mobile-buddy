@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.6.0...android-v0.6.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **android:** a tap with no service behind it now waits for one ([#7](https://github.com/heywood8/claude-mobile-buddy/issues/7)) ([8d19217](https://github.com/heywood8/claude-mobile-buddy/commit/8d19217a3a8b2193a48dce5b0bde93a4da3778c5))
+
 ## [0.6.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.5.0...android-v0.6.0) (2026-08-27)
 
 
