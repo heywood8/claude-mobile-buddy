@@ -262,6 +262,7 @@ actor Coordinator {
             session: request.sessionID,
             tool: request.toolName,
             hint: request.hint,
+            why: request.why,
             cwd: request.cwd,
             expires: Int(deadline.timeIntervalSince1970))
 

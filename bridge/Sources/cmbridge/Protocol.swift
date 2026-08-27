@@ -19,6 +19,9 @@ struct Prompt: Codable, Equatable {
     let tool: String
     /// Truncated by the bridge; see `Prompt.hintLimit`.
     let hint: String
+    /// What the tool call is for, as the terminal prints it under the command. Empty for the
+    /// many tools that do not carry one. Truncated; see `Prompt.whyLimit`.
+    let why: String
     let cwd: String
     /// Wall-clock second at which the bridge gives up and fails open, so the phone
     /// can show a countdown instead of an indefinite spinner.
@@ -26,19 +29,34 @@ struct Prompt: Codable, Equatable {
 
     static let hintLimit = 512
 
+    /// A sentence, not a paragraph. Anything longer than this is not the one-line reason the
+    /// terminal prints, and a bubble that scrolls buries the command underneath it.
+    static let whyLimit = 160
+
     static func truncatingHint(
         id: String,
         session: String,
         tool: String,
         hint: String,
+        why: String,
         cwd: String,
         expires: Int
     ) -> Prompt {
-        var h = hint
-        if h.utf8.count > hintLimit {
-            h = String(decoding: Array(h.utf8.prefix(hintLimit)), as: UTF8.self) + "…"
-        }
-        return Prompt(id: id, session: session, tool: tool, hint: h, cwd: cwd, expires: expires)
+        return Prompt(
+            id: id,
+            session: session,
+            tool: tool,
+            hint: clamp(hint, to: hintLimit),
+            why: clamp(why, to: whyLimit),
+            cwd: cwd,
+            expires: expires)
+    }
+
+    /// Cut on a byte budget rather than a character count: the limit is about what goes over
+    /// the air, not about what a person would count.
+    private static func clamp(_ text: String, to limit: Int) -> String {
+        guard text.utf8.count > limit else { return text }
+        return String(decoding: Array(text.utf8.prefix(limit)), as: UTF8.self) + "…"
     }
 }
 

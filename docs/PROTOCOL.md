@@ -184,6 +184,7 @@ treats the link as dead after 30 seconds of silence.
     "id": "req_abc123",
     "tool": "Bash",
     "hint": "rm -rf /tmp/foo",
+    "why": "Clear the scratch directory before the next run",
     "cwd": "~/git/github/claude-mobile-buddy",
     "expires": 1775731279
   }
@@ -251,7 +252,13 @@ the bridge will give up and fail open, so the phone can render a countdown rathe
 spinner. `cwd` is likewise an extension — with several sessions in flight, the tool name alone
 does not say which project is asking.
 
-`hint` is truncated by the bridge to 512 bytes.
+`why` is an extension too: Claude Code asks each tool call for a one-line account of what it is
+for and prints it under the command in the terminal, and the bridge forwards it as-is. It comes
+from `tool_input.description` where the tool has one, and is an empty string where it does not —
+most tools do not. A phone showing only the command is deciding on half of what the terminal
+shows.
+
+`hint` is truncated by the bridge to 512 bytes, `why` to 160.
 
 ### Decision — phone to bridge
 

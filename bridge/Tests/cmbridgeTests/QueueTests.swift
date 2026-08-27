@@ -258,15 +258,47 @@ struct QueueTests {
         _ = await pending.value
     }
 
+    @Test("carries the tool's own reason, trimmed, and leaves it empty when there is none")
+    func carriesWhy() async throws {
+        let link = FakeLink()
+        let coordinator = Coordinator(link: link, log: Logger())
+
+        let long = String(repeating: "y", count: Prompt.whyLimit * 2)
+        let pending = Task {
+            await coordinator.decide(request(tool: "Bash", hint: "ss -lntp", why: long))
+        }
+        try await settle { await coordinator.queueDepth == 1 }
+
+        let why = try #require(link.lastSnapshot?.prompt?.why)
+        #expect(why.hasPrefix("yyy"))
+        #expect(why.utf8.count <= Prompt.whyLimit + 4)
+
+        var id = try #require(await coordinator.headID)
+        await coordinator.resolve(Decision(id: id, decision: .once))
+        _ = await pending.value
+
+        // Most tools carry no description at all, and an empty string is the honest answer —
+        // the phone leaves the line off rather than inventing a reason.
+        let bare = Task { await coordinator.decide(request(tool: "Write", hint: "a.txt")) }
+        try await settle { await coordinator.queueDepth == 1 }
+        #expect(link.lastSnapshot?.prompt?.why == "")
+
+        id = try #require(await coordinator.headID)
+        await coordinator.resolve(Decision(id: id, decision: .once))
+        _ = await bare.value
+    }
+
     // MARK: - Helpers
 
-    private func request(tool: String, hint: String) -> HookRequest {
+    private func request(tool: String, hint: String, why: String = "") -> HookRequest {
+        var input: [String: Any] = ["command": hint]
+        if !why.isEmpty { input["description"] = why }
         let body: [String: Any] = [
             "session_id": "test",
             "cwd": "/tmp/project",
             "hook_event_name": "PermissionRequest",
             "tool_name": tool,
-            "tool_input": ["command": hint],
+            "tool_input": input,
         ]
         let data = try! JSONSerialization.data(withJSONObject: body)
         return HookRequest(body: data)!

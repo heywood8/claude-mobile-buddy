@@ -12,6 +12,9 @@ struct HookRequest {
     let cwd: String
     /// Best-effort one-line summary of what the tool is about to do.
     let hint: String
+    /// Why it wants to, in Claude's own words — the line the terminal prints under the
+    /// command. Empty for tools that carry no such field, which is most of them.
+    let why: String
     /// Where Claude Code is writing this session's transcript. Empty when the event does not
     /// carry it, which is not an error — the token count simply does not move.
     let transcriptPath: String
@@ -26,7 +29,9 @@ struct HookRequest {
         sessionID = (obj["session_id"] as? String) ?? "unknown"
         toolName = (obj["tool_name"] as? String) ?? "unknown"
         cwd = Self.abbreviateHome((obj["cwd"] as? String) ?? "")
-        hint = Self.summarise(tool: toolName, input: obj["tool_input"] as? [String: Any])
+        let input = obj["tool_input"] as? [String: Any]
+        hint = Self.summarise(tool: toolName, input: input)
+        why = Self.reason(input: input)
         transcriptPath = (obj["transcript_path"] as? String) ?? ""
         userPrompt = (obj["prompt"] as? String) ?? ""
     }
@@ -46,6 +51,21 @@ struct HookRequest {
         }
         if let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]) {
             return String(decoding: data, as: UTF8.self)
+        }
+        return ""
+    }
+
+    /// The tool's own account of why it is doing this.
+    ///
+    /// Claude Code asks for it per tool call and prints it under the command in the terminal,
+    /// and it is the half of the question a phone was missing: `hint` says what will run,
+    /// this says what it is for. `description` is the field Bash uses; the rest are here
+    /// because other tools spell the same idea differently and a wrong guess costs nothing —
+    /// an absent field just leaves the line off.
+    private static func reason(input: [String: Any]?) -> String {
+        guard let input else { return "" }
+        for key in ["description", "explanation", "reason"] {
+            if let value = input[key] as? String, !value.isEmpty { return value }
         }
         return ""
     }
