@@ -49,6 +49,18 @@ object BuddyState {
     @Volatile
     var onRevoke: ((String) -> Unit)? = null
 
+    /**
+     * A tap taken while nothing was holding the link.
+     *
+     * Kept rather than discarded because the request it answers is not gone: the bridge waits
+     * on it for up to half an hour, which is long enough for the service to come back and hand
+     * the verdict over. [BuddyService] delivers it, and only against a snapshot that still
+     * lists the request — so a tap can outlive the service without outliving the question.
+     */
+    @Volatile
+    var deferred: DeferredTap? = null
+        private set
+
     fun update(value: Snapshot) = main.post { snapshot = value }
 
     fun setLinked(value: Boolean) = main.post {
@@ -69,10 +81,28 @@ object BuddyState {
         onForegroundChange?.invoke()
     }
 
-    fun answer(id: String, verdict: Verdict, source: String, session: String = "") {
-        sink?.invoke(Decision(id = id, decision = verdict), source)
+    /**
+     * Hands a verdict to the link, and says whether anything was there to take it.
+     *
+     * The answer is only recorded when it actually left: a crab reacting to a decision the
+     * bridge never saw is a lie the screen tells about the terminal, and the caller cannot
+     * tell one from the other without being told.
+     */
+    fun answer(id: String, verdict: Verdict, source: String, session: String = ""): Boolean {
+        val sink = this.sink ?: return false
+        sink.invoke(Decision(id = id, decision = verdict), source)
         val at = System.currentTimeMillis() / 1000
         main.post { lastAnswer = Answer(id, session, verdict, at) }
+        return true
+    }
+
+    /** Holds a tap that had nowhere to go. A newer one replaces it: the head of the queue moved. */
+    fun defer(id: String, verdict: Verdict) {
+        deferred = DeferredTap(id, verdict, System.currentTimeMillis() / 1000)
+    }
+
+    fun clearDeferred() {
+        deferred = null
     }
 
     /**
@@ -85,6 +115,13 @@ object BuddyState {
     data class Answer(
         val id: String,
         val session: String,
+        val verdict: Verdict,
+        val at: Long,
+    )
+
+    /** [at] is this phone's clock, and is only ever used to say how stale a delivered tap was. */
+    data class DeferredTap(
+        val id: String,
         val verdict: Verdict,
         val at: Long,
     )

@@ -174,21 +174,6 @@ Two rules apply to all of them:
   Re-running `install-hook` replaces the old matched entry rather than appending (the
   `isOurs` merge already keys on the URL, so this should be free — verify it).
 
-### Bugs that read as UX
-
-- **A notification tap with no service behind it goes nowhere.** `DecisionReceiver` hands
-  the verdict to `BuddyState.sink`, which is null whenever the service is not up, and the
-  only trace is a log line.
-
-  *Where:* `DecisionReceiver.kt`, `BuddyState.answer()`. Minimum: when `sink == null`, post
-  a toast "Not connected to the bridge" and leave the notification up. Better: call
-  `BuddyLauncher.resume(context, "notification tap")` first, then the toast only if the sink
-  is still null — the request itself is in the bridge's queue for up to half an hour, so the
-  next snapshot re-raises the notification and the tap can be repeated.
-  *Wire:* none.
-  *Done when:* with the service stopped, tapping Allow on a stale notification produces a
-  visible message and does not silently cancel the notification.
-
 ### Features
 
 - **Allow for the rest of the session.** Two verdicts exist, `once` and `deny`. The
