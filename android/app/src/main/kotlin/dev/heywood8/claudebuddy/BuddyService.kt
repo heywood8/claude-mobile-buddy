@@ -100,7 +100,48 @@ class BuddyService : Service() {
 
         lastSnapshot = snapshot
         BuddyState.update(snapshot)
+        // A tap taken while we were down has been waiting for exactly this: a snapshot whose
+        // head is still the request it answers.
+        if (deliverDeferred(snapshot)) return
         renderApproval()
+    }
+
+    /**
+     * Sends a verdict tapped while nothing was holding the link.
+     *
+     * Guarded on the request still being the head rather than on a clock: one that timed out,
+     * was withdrawn, or was answered in the terminal must not be answered again by a tap from
+     * minutes ago. The bridge drops a decision whose id it no longer holds, so this is belt to
+     * its braces — but it is also what keeps the journal honest about which requests this phone
+     * actually decided.
+     *
+     * The head and not merely the queue, because the head is the only thing the notification
+     * can ever have been showing, and it is what [journal] resolves an id against.
+     *
+     * Returns true when something was sent, so the caller leaves the card to the snapshot the
+     * bridge pushes on resolving it rather than raising one for a request already on its way
+     * out.
+     */
+    private fun deliverDeferred(snapshot: Snapshot): Boolean {
+        val deferred = BuddyState.deferred ?: return false
+        if (snapshot.prompt?.id != deferred.id) {
+            Log.i(TAG, "dropping a deferred verdict: ${deferred.id} is no longer waiting")
+            BuddyState.clearDeferred()
+            return false
+        }
+        // Not cleared until it is taken: between starting the peripheral and attaching the sink
+        // there is a window, and a verdict lost in it would be lost for good.
+        val age = System.currentTimeMillis() / 1000 - deferred.at
+        if (!BuddyState.answer(deferred.id, deferred.verdict, BuddyState.Source.NOTIFICATION)) {
+            return false
+        }
+        Log.i(
+            TAG,
+            "delivered a deferred ${deferred.verdict} for ${deferred.id}, tapped ${age}s ago",
+        )
+        BuddyState.clearDeferred()
+        Notifications.clearApproval(this)
+        return true
     }
 
     private fun renderApproval() {

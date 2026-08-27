@@ -21,28 +21,35 @@ object BuddyLauncher {
      *
      * Silent about every reason not to: from a boot receiver there is nobody to tell, and the
      * dashboard already says what is missing when you open it.
+     *
+     * Returns whether the service was actually asked to start, because the three ways this
+     * declines — stopped on purpose, nothing paired, permissions withdrawn — look identical to
+     * a successful start from the outside. A caller that is about to tell the user something
+     * needs to know which of the two happened; the ones with nobody to tell ignore it.
      */
-    fun resume(context: Context, reason: String) {
-        if (!Settings.shouldRun(context)) return
+    fun resume(context: Context, reason: String): Boolean {
+        if (!Settings.shouldRun(context)) return false
         if (Keyring.hosts(context).isEmpty()) {
             Log.i(TAG, "not resuming after $reason: no paired bridges")
-            return
+            return false
         }
         if (!hasPermissions(context)) {
             Log.i(TAG, "not resuming after $reason: bluetooth permissions not granted")
-            return
+            return false
         }
-        try {
+        return try {
             ContextCompat.startForegroundService(
                 context, Intent(context, BuddyService::class.java)
             )
             Log.i(TAG, "resuming after $reason")
+            true
         } catch (e: Exception) {
             // Which foreground service types may start from the background — and from
             // BOOT_COMPLETED in particular — has moved with almost every release, and getting
             // it wrong throws rather than degrading. Failing to come back is survivable; the
             // dashboard's Start button still works. Crashing on boot is not.
             Log.w(TAG, "could not resume after $reason", e)
+            false
         }
     }
 
