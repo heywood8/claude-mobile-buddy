@@ -350,44 +350,23 @@ Two rules apply to all of them:
   the new text; the stale-card clearing on `PostToolUse` still works for Edit and Write
   (covered by a `QueueTests` case).
 
-- **Tapping a request to read all of it.** The command on screen is cut off and there is no way
-  to see the rest. Deciding on a command you can only see the first six lines of is the one
-  thing this screen exists to prevent, and `rm -rf` is at its most interesting past the
-  ellipsis.
+- **The command is cut to 512 bytes before it leaves the Mac.** `Prompt.hintLimit` clamps
+  `hint`, and `whyLimit` clamps `why` to 160, in `Prompt.truncatingHint`. Past that the phone
+  never received the text, so no amount of tapping produces it — the bubble now says so when
+  it is opened and the hint ends in an ellipsis, which is honest but not the same as having it.
 
-  It is two truncations with the same symptom, and they cost very different amounts:
+  The on-screen half of this shipped: a clipped bubble carries "Tap to read the rest" and
+  unfolds in place, which covers every command under the limit — nearly all of them.
 
-  1. **On screen.** `Bubble()` draws `hint` at `maxLines = 6`, or 3 for a queued one, with
-     `TextOverflow.Ellipsis`. The phone is already holding the whole 512 bytes — nothing is
-     missing, it is only not drawn. Tapping to expand costs no wire change at all and fixes
-     every request whose command is under the limit, which is nearly all of them.
-  2. **On the wire.** `Prompt.hintLimit` cuts `hint` to 512 bytes and `whyLimit` cuts `why` to
-     160, in `Prompt.truncatingHint` on the bridge, before either leaves the Mac. Past that the
-     phone never received the text and no amount of tapping will produce it.
-
-  Do (1) first and alone. It is most of the value, and it is the half that can ship without
-  touching the protocol.
-
-  *Where (1):* `DashboardScreen.kt` `Bubble()` — a `var expanded by remember(front.id)`,
-  `Modifier.clickable` on the `Surface`, `maxLines = if (expanded) Int.MAX_VALUE else …`.
-  Reset per request id, so the next one does not arrive already unrolled. The bubble is inside
-  a `verticalScroll`, so a long one scrolls rather than pushing the rail off screen — worth
-  checking in the wide layout, where the rail is a separate column and does not move. The
-  notification is already ahead of the screen here: `Notifications.approval` uses
-  `BigTextStyle` with `why`, `hint` and `cwd` in full, so the shade shows more than the app.
-  *Wire (1):* none.
-  *Done when:* tapping a bubble shows the whole hint and tapping again folds it back; a queued
-  bubble expands too; answering and being handed the next request draws it folded.
-
-  *Where (2):* `Protocol.swift` / `Protocol.kt` `hintLimit`. Raising it is one number, and the
+  *Where:* `Protocol.swift` / `Protocol.kt` `hintLimit`. Raising the number is one edit, and the
   8 KiB line cap is the real ceiling — a snapshot carries the head plus everything queued, so
-  the budget is per queue, not per prompt, and `Clip` has already spent the headroom arithmetic
+  the budget is per queue rather than per prompt, and `Clip` has already done that arithmetic
   once (see the clip section in `PROTOCOL.md`). Sending the full command only for the request
-  being expanded, on request from the phone, is the version that does not blow the cap; that
-  needs a new message in both directions and is a bigger job than it first looks.
-  *Wire (2):* `hint` grows, or a `{"t":"full","id":…}` request and its answer.
+  being opened, on request from the phone, is the version that cannot blow the cap; it needs a
+  new message in both directions and is a bigger job than it first looks.
+  *Wire:* `hint` grows, or a `{"t":"full","id":…}` request and its answer.
   *Done when:* a command longer than 512 bytes can be read to the end on the phone, and a queue
-  of several long requests still fits in one snapshot.
+  of several long ones still fits in one snapshot.
 
 ### Looked at and left alone
 
