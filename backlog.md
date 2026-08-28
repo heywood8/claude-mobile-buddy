@@ -39,14 +39,35 @@ Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
 Shipped for text. What was looked at and left out, so it is not rediscovered:
 
-- **Automatic phone-to-Mac with no gesture at all: not possible.** From Android 10 the clipboard
-  may be read only by the app with focus or by the default input method.
-  `READ_CLIPBOARD_IN_BACKGROUND` exists for exactly this and is `signature`, so it is reachable
-  only by a platform-signed app — `pm grant` does not help, and neither does a foreground
-  service, which is not focus. The alternatives are writing a keyboard or holding an
-  accessibility service, and either one is a far larger privilege than the feature is worth.
-  What ships instead: automatic while the dashboard has focus, plus an `ACTION_SEND` target so
-  the gesture is Share rather than "switch apps first".
+- **Automatic phone-to-Mac with no gesture at all: not possible.** Measured on the Pixel rather
+  than reasoned about, because it is the question everyone asks first — copying a code out of
+  Google Authenticator and having it appear on the Mac is the single most wanted case, and it is
+  the one that cannot be built:
+
+  - `appops get dev.heywood8.claudebuddy READ_CLIPBOARD` already reports **allow**, and the
+    reads are refused anyway. It is not an app-op gate that could be opened.
+  - `ClipboardService` states the rule in the log verbatim: *application is not in focus nor is
+    it a system service*. No permission or app-op is consulted.
+  - `adb shell cmd clipboard get` → *No shell command implementation*. Even shell cannot read it.
+  - `READ_CLIPBOARD_IN_BACKGROUND` is `signature`, so platform-signed apps only. `pm grant`
+    does not reach it.
+
+  That leaves the default IME (replace the daily keyboard with this — no), an accessibility
+  service reading the screen (every password on every screen, forever — no), and a focusable
+  overlay bubble, which does take window focus and would work but is still a tap, plus a
+  permanent bubble and `SYSTEM_ALERT_WINDOW`. Strictly worse than the shade.
+
+  So one tap is the floor, and what ships is the cheapest one: a **Send clipboard** action on
+  the bridge notification, pointing at an activity because an activity has a window and a
+  window takes focus. Plus the two that were already there — the dashboard capturing on focus,
+  and an `ACTION_SEND` target.
+
+- **Sharing while the dashboard sits behind it undoes itself.** `ShareActivity` sends text
+  without putting it on this phone's clipboard, so when focus falls back to `MainActivity` the
+  capture-on-focus sees the clipboard still holding something else and sends *that*, replacing
+  what was just shared. Only reachable when the dashboard is the thing behind the share sheet,
+  which is not how anybody shares. Left alone rather than fixed by having share also set the
+  local clipboard, which would be a share sheet with a side effect nobody asked for.
 - **Images and files: dropped.** The link moves a couple of kilobytes a second and the line cap
   is 8 KiB. A screenshot is three orders of magnitude out, and a chunked transfer for it would
   be the `char_begin`/`chunk`/`file_end` machinery already rejected above, for a payload nobody

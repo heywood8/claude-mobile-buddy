@@ -22,14 +22,46 @@ import android.util.Log
  * the app with focus. A foreground service is neither: [BuddyService] can hold a BLE link for
  * hours and still not be allowed to see a single character. `READ_CLIPBOARD_IN_BACKGROUND`
  * exists and is signature-level, so it is not available to anything that is not signed by the
- * platform, and no amount of adb changes that.
+ * platform — and measured on this device, `appops` already reports `READ_CLIPBOARD: allow`
+ * while the reads are refused anyway, so it is not an app-op gate that could be opened either.
+ * `ClipboardService` says why in as many words: *not in focus nor is it a system service*.
  *
- * So the Mac half is genuinely automatic and this half is as close as the platform permits:
- * every clipboard change made while the app is on screen goes over by itself, and everything
- * else reaches the Mac through the share sheet, which hands us the text directly and needs no
- * clipboard read at all. Writing is unrestricted, so a clip *from* the Mac always lands.
+ * So the Mac half is genuinely automatic and this half costs one deliberate act, always. The
+ * three that exist all end in something holding focus:
+ *
+ * - the dashboard is on screen, and the clipboard is read as it gains focus;
+ * - text arrives through the share sheet, which needs no read at all ([ShareActivity]);
+ * - the notification's **Send clipboard** action ([CaptureActivity]), which is the cheapest of
+ *   them — it never leaves the app you are in.
+ *
+ * Writing is unrestricted, so a clip *from* the Mac always lands.
  */
 object Clipboard {
+    /**
+     * What became of an attempt to send.
+     *
+     * Every case is a different sentence, because all of them are reachable by a person tapping
+     * one button and a toast that says the wrong thing about a two-gesture flow is worse than
+     * no toast. [ALREADY_THERE] in particular is not a failure — it is what a second tap on the
+     * same clipboard means, and calling it an error would read as one.
+     */
+    enum class Outcome {
+        SENT,
+        NOTHING,
+        ALREADY_THERE,
+        NOT_CONNECTED,
+        DISABLED;
+
+        val message: String
+            get() = when (this) {
+                SENT -> "Sent to the Mac"
+                NOTHING -> "Nothing to send"
+                ALREADY_THERE -> "The Mac already has this"
+                NOT_CONNECTED -> "Not connected to the bridge"
+                DISABLED -> "Shared clipboard is off"
+            }
+    }
+
     /**
      * The text this phone and the Mac last agreed on.
      *
@@ -73,45 +105,58 @@ object Clipboard {
     /**
      * Sends whatever is on the clipboard now, if it is news.
      *
-     * Only ever called from a window that has focus — from anywhere else the read comes back
-     * null and this does nothing, which is the platform working rather than a bug.
+     * Only meaningful from something that holds focus. Called from anywhere else the read comes
+     * back null and this reports [Outcome.NOTHING], which is the platform working rather than a
+     * bug — but it is also indistinguishable from an empty clipboard, so no caller should be
+     * guessing which happened. The three callers that exist all hold focus by construction.
      */
-    fun capture(context: Context) {
-        if (!Settings.clipboardEnabled(context)) return
-        val manager = context.getSystemService(ClipboardManager::class.java) ?: return
+    fun capture(context: Context): Outcome {
+        if (!Settings.clipboardEnabled(context)) return Outcome.DISABLED
+        val manager = context.getSystemService(ClipboardManager::class.java)
+            ?: return Outcome.NOTHING
         val text = manager.primaryClip
             ?.takeIf { it.itemCount > 0 }
             ?.getItemAt(0)
             ?.coerceToText(context)
             ?.toString()
-            ?: return
-        send(context, text)
+            ?: return Outcome.NOTHING
+        return send(text)
     }
 
     /**
      * Sends text handed to us directly, by the share sheet.
      *
-     * The one path that is not subject to the read restriction at all: the system gives us the
-     * text in the intent, so there is nothing to read. Returns false when there was nothing
-     * holding the link to take it, so the caller can say so rather than appear to have worked.
+     * The one path not subject to the read restriction at all: the system gives us the text in
+     * the intent, so there is nothing to read.
      */
-    fun share(context: Context, text: String): Boolean {
-        if (!Settings.clipboardEnabled(context)) return false
-        return send(context, text)
+    fun share(context: Context, text: String): Outcome {
+        if (!Settings.clipboardEnabled(context)) return Outcome.DISABLED
+        return send(text)
     }
 
-    private fun send(context: Context, text: String): Boolean {
-        if (text.isEmpty() || text == mirror) return false
-        // The mirror means "what the Mac is known to have", so it does not move until
-        // something has actually taken the clip. Advancing it before this check would make
-        // sharing the same text again — the obvious thing to do after being told the bridge
-        // was not connected — look like something already agreed on, and it would never cross.
-        val sink = BuddyState.clipSink ?: return false
-        mirror = text
-        sink.invoke(Clip.of(text, System.currentTimeMillis() / 1000))
+    private fun send(text: String): Outcome {
+        if (text.isEmpty()) return Outcome.NOTHING
+        if (text == mirror) return Outcome.ALREADY_THERE
+
+        // The sink being attached says only that the service is up. The BLE session comes and
+        // goes underneath it, so the send has to be the thing that reports, not its presence.
+        // This was wrong once and the log caught it saying "sent 4095 bytes to the bridge" in
+        // the same millisecond as "cannot send a clip: no ready session".
+        val sink = BuddyState.clipSink ?: return Outcome.NOT_CONNECTED
+        val clip = Clip.of(text, System.currentTimeMillis() / 1000)
+        if (!sink.invoke(clip)) return Outcome.NOT_CONNECTED
+
+        // Only now, and to what the *Mac* will hold rather than to what is on this clipboard.
+        //
+        // Two rules in one line. The mirror does not move until something has actually taken
+        // the clip, or sending the same text again — the obvious thing to do after being told
+        // the bridge was not connected — would look like something already agreed on and could
+        // never cross. And it takes the clamped text, or anything over the limit would arrive
+        // truncated, compare unequal when it came back, and overwrite the longer original.
+        mirror = clip.text ?: text
         BuddyState.noteClip(fromPhone = true, chars = text.length)
         Log.i(TAG, "sent ${text.toByteArray().size} bytes to the bridge")
-        return true
+        return Outcome.SENT
     }
 
     private const val LABEL = "Claude Buddy"

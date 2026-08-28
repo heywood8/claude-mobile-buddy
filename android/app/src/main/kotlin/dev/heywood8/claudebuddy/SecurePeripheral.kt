@@ -86,14 +86,23 @@ class SecurePeripheral(
         transport?.send(sealed)
     }
 
-    /** Never logs the text, only that there was some. */
-    fun send(clip: Clip) {
+    /**
+     * Never logs the text, only that there was some.
+     *
+     * Returns whether it actually left. The service being up is not the same as the session
+     * being ready — the sink is attached for the whole life of the service, and the handshake
+     * comes and goes underneath it — so a caller that assumed otherwise would tell the user a
+     * clip had been sent while this was writing "no ready session" to the log in the same
+     * millisecond. Measured, not theorised.
+     */
+    fun send(clip: Clip): Boolean {
         val sealed = session?.seal(Wire.encodePayload(clip))
         if (sealed == null) {
             Log.w(TAG, "cannot send a clip: no ready session")
-            return
+            return false
         }
-        transport?.send(sealed)
+        transport?.send(sealed) ?: return false
+        return true
     }
 
     // MARK: - Session plumbing

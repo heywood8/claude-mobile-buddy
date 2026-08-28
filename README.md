@@ -111,10 +111,16 @@ be read only by the app that has focus or by the keyboard itself; a foreground s
 BLE link for hours is neither, and the permission that would lift it is signature-level, so no
 setting and no adb command reaches it. So:
 
+- **from the shade** — the bridge notification carries a **Send clipboard** action. Copy, swipe
+  down, tap, swipe up: you never leave the app you were in. This is the one to use, and the only
+  one that works for an app you cannot share out of — an authenticator code, say;
 - **the app is open** — anything you copy goes over by itself, and opening the app sends
   whatever you copied while it was closed;
-- **the app is not open** — select the text, **Share**, *Send to the Mac*. The share sheet hands
-  the text over directly, so there is no clipboard to be barred from reading.
+- **select and share** — **Share**, *Send to the Mac*. The share sheet hands the text over
+  directly, so there is no clipboard to be barred from reading.
+
+The action points at an activity rather than a broadcast, and that is the whole of why it works:
+a receiver has no window, and only something holding focus may read the clipboard.
 
 Either way it lands on the Mac's pasteboard ready to paste. Writing is unrestricted on both
 sides, so that half is never in doubt.

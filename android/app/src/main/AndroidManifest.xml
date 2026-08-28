@@ -54,6 +54,19 @@
             </intent-filter>
         </activity>
 
+        <!-- The Send clipboard action on the bridge notification. Not exported: it is started
+             only by our own PendingIntent. noHistory and excludeFromRecents because it is a
+             window that exists to hold focus for an instant, not a screen anybody navigates
+             to or back from. -->
+        <activity
+            android:name=".CaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".BuddyService"
             android:exported="false"
