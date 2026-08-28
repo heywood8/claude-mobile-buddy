@@ -163,6 +163,60 @@ struct Decision: Codable, Equatable {
     let decision: Verdict
 }
 
+/// A clipboard hand-off, in either direction.
+///
+/// Symmetric on purpose, and carrying `t` rather than the maker specification's `cmd`: nothing
+/// in that specification describes a clipboard, so there is no verb to follow, and inventing
+/// one for the phone's half alone would leave the two ends of a single feature looking like
+/// unrelated messages.
+///
+/// The text travels base64 rather than as a JSON string. JSON escaping expands a control
+/// character to six bytes, so a clip of the wrong shape would push the sealed line past
+/// `LineCodec.maxLine` — and that does not fail politely. The oversized line is dropped by the
+/// assembler, whatever follows the newline decrypts as garbage, and the session ends. Base64
+/// is a flat four thirds, so `textLimit` is provably under the cap rather than measured to be.
+struct Clip: Codable, Equatable {
+    var t: String = "clip"
+    /// base64 of the UTF-8 text.
+    let b: String
+    /// The sender's own clock when it was copied. Display only — unlike everything in
+    /// `Snapshot`, this is the one message each side originates, so there is no single frame
+    /// to work durations out in.
+    let at: Int
+
+    /// Bytes of UTF-8 text.
+    ///
+    /// Worked out backwards from the 8 KiB line cap: the frame envelope costs 22 bytes, the
+    /// AES-GCM tag 16, base64 four thirds of the rest, and this object's own JSON 35 — which
+    /// leaves room for 4554 bytes of text. 4096 keeps roughly 450 in hand, and a clipboard
+    /// worth carrying over a link that moves a couple of kilobytes a second is not bigger.
+    static let textLimit = 4096
+
+    /// Nil for a peer that sent something that is not base64, or not UTF-8 inside it.
+    var text: String? {
+        guard let data = Data(base64Encoded: b) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func of(_ text: String, at: Int) -> Clip {
+        Clip(b: clamp(text).base64EncodedString(), at: at)
+    }
+
+    /// Cuts on a byte budget, backing off to a character boundary.
+    ///
+    /// Truncated silently and without an ellipsis, unlike `hint`: a clipboard is pasted rather
+    /// than read, and a marker glued to the end would be pasted too.
+    private static func clamp(_ text: String) -> Data {
+        let utf8 = Data(text.utf8)
+        guard utf8.count > textLimit else { return utf8 }
+        // A continuation byte is 10xxxxxx. Cutting on one splits a character, and the far end
+        // would decode the whole clip to nil rather than to something slightly short.
+        var end = textLimit
+        while end > 0, utf8[end] & 0xC0 == 0x80 { end -= 1 }
+        return utf8.prefix(end)
+    }
+}
+
 struct Bye: Codable, Equatable {
     var t: String = "bye"
     let reason: String
@@ -171,6 +225,7 @@ struct Bye: Codable, Equatable {
 /// Anything the phone can send us.
 enum Inbound: Equatable {
     case decision(Decision)
+    case clip(Clip)
     case bye(String)
 }
 
@@ -206,6 +261,9 @@ enum LineCodec {
         let decoder = JSONDecoder()
         if let d = try? decoder.decode(Decision.self, from: line), d.cmd == "permission" {
             return .decision(d)
+        }
+        if let c = try? decoder.decode(Clip.self, from: line), c.t == "clip" {
+            return .clip(c)
         }
         if let b = try? decoder.decode(Bye.self, from: line), b.t == "bye" {
             return .bye(b.reason)

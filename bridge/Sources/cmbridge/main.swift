@@ -31,6 +31,7 @@ func takeValue(_ name: String) -> String? {
 let rotate = takeFlag("--rotate")
 let showURL = takeFlag("--url")
 let usePNG = takeFlag("--png")
+let noClipboard = takeFlag("--no-clipboard")
 let settingsPath = takeValue("--settings").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
 let port = takeValue("--port").flatMap(Int.init) ?? 8787
 let window = takeValue("--window").flatMap(TimeInterval.init) ?? Coordinator.defaultWindow
@@ -151,7 +152,7 @@ case "print-agent":
     \t\t<string>\(Int(window))</string>
     \t\t<string>--session-idle</string>
     \t\t<string>\(Int(sessionIdle))</string>
-    \t</array>
+    \(noClipboard ? "\t\t<string>--no-clipboard</string>\n" : "")\t</array>
     \t<key>RunAtLoad</key>
     \t<true/>
     \t<key>KeepAlive</key>
@@ -210,11 +211,21 @@ case "run", nil:
         link: link, log: log, window: window, skippedTools: skippedTools,
         sessionIdle: sessionIdle)
 
+    // Held for the life of the process, like the signal sources: a mirror that goes out of
+    // scope takes its timer with it and the pasteboard silently stops being watched.
+    let clipboard = noClipboard ? nil : PasteboardMirror(link: link, log: log)
+    clipboard?.start()
+    if noClipboard { log.info("clipboard mirroring off") }
+
     link.onLine = { line in
         do {
             switch try LineCodec.decode(line) {
             case .decision(let decision):
                 Task { await coordinator.resolve(decision) }
+            case .clip(let clip):
+                // Dropped rather than applied when mirroring is off, so --no-clipboard means
+                // the pasteboard is untouched in both directions and not merely unread.
+                clipboard?.receive(clip)
             case .bye(let reason):
                 log.info("phone said bye: \(reason)")
             }
@@ -270,10 +281,12 @@ default:
     cmbridge — Claude Code approvals on your phone
 
       cmbridge run [--port N] [--window SECONDS] [--session-idle SECONDS]
-                   [--skip-tools A,B]
+                   [--skip-tools A,B] [--no-clipboard]
                                        run the bridge (port 8787, window 30 min, a session
                                        forgotten after 6 h of silence; AskUserQuestion and
-                                       ExitPlanMode stay in the terminal)
+                                       ExitPlanMode stay in the terminal). The pasteboard is
+                                       shared with the phone both ways unless --no-clipboard;
+                                       clips marked concealed or transient are never sent.
       cmbridge pair [--png] [--rotate] [--url]
                                        show the pairing code; --png opens an image
                                        instead of drawing it in the terminal

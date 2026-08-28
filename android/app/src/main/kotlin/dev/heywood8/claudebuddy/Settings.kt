@@ -11,6 +11,26 @@ object Settings {
     private const val FULL_SCREEN = "fullScreen"
     private const val PATH_DEPTH = "pathDepth"
     private const val LAST_LEVEL = "lastLevel"
+    private const val CLIPBOARD = "clipboard"
+
+    /**
+     * Whether the clipboard is shared with the Mac.
+     *
+     * On by default, in both directions: a shared clipboard that has to be armed first is a
+     * send button with extra steps, and you reach for it at the moment you have already
+     * copied something.
+     *
+     * Off stops this end completely — nothing is read, nothing that arrives is applied. The
+     * Mac is not told, and goes on sending clips into a link that drops them; the bridge's own
+     * `--no-clipboard` is the switch for that end. Two switches rather than one negotiated
+     * setting, because either device should be able to opt out without the other's agreement.
+     */
+    fun clipboardEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(CLIPBOARD, true)
+
+    fun setClipboardEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(CLIPBOARD, enabled).apply()
+    }
 
     /** The highest level already celebrated, so opening the app is not a party. */
     fun lastLevel(context: Context): Int = prefs(context).getInt(LAST_LEVEL, 0)

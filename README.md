@@ -83,6 +83,45 @@ keeps the hooks and permission rules it started with, so `install-hook` and any 
 that stays quiet right after either is the expected outcome, and restarting the session is the
 whole fix.
 
+## The shared clipboard
+
+Copy on the Mac, paste on the phone, and back. It rides the same encrypted link as the
+approvals, so there is nothing extra to pair and nothing that leaves the room.
+
+Text only, up to 4 KB. Nothing is stored on either side: a clip replaces the one before it and
+is never written to the journal, which is a file you might hand to someone.
+
+**Mac to phone is automatic.** The bridge watches the pasteboard and the phone's clipboard
+follows it, whether the app is open or not.
+
+It needs one grant, once. From macOS 15.4 a program that reads the pasteboard without you
+pressing paste raises a system alert, and a background agent can never be "you pressing paste":
+
+> System Settings › Privacy & Security › Paste from Other Apps › cmbridge › **Allow**
+
+Until that is set, macOS asks every time you copy something, which is worse than not having the
+feature. `cmbridge run` says which of the three states it is in when it starts, and
+`--no-clipboard` turns the whole thing off in both directions.
+
+A clip a password manager has marked concealed is never sent. That is the convention from
+[nspasteboard.org](http://nspasteboard.org), and 1Password and its neighbours all set it.
+
+**Phone to Mac needs a gesture**, and the reason is not ours. From Android 10 the clipboard can
+be read only by the app that has focus or by the keyboard itself; a foreground service holding a
+BLE link for hours is neither, and the permission that would lift it is signature-level, so no
+setting and no adb command reaches it. So:
+
+- **the app is open** — anything you copy goes over by itself, and opening the app sends
+  whatever you copied while it was closed;
+- **the app is not open** — select the text, **Share**, *Send to the Mac*. The share sheet hands
+  the text over directly, so there is no clipboard to be barred from reading.
+
+Either way it lands on the Mac's pasteboard ready to paste. Writing is unrestricted on both
+sides, so that half is never in doubt.
+
+Turning it off is a switch on the phone and `--no-clipboard` on the Mac. They are separate on
+purpose: either device should be able to opt out without the other agreeing.
+
 ## Security
 
 The phone advertises itself into the air, and a GATT server that anyone in radio range can talk
@@ -96,7 +135,12 @@ to would be a remote control for approving shell commands on your workstation. S
   waiting, not what it wants to run.
   **Light up the screen** wakes the display for a waiting request; the keyguard stays in front
   of it, and so does the redaction. Lighting up is a summons, not a disclosure.
-- Both sides journal every decision, including the ones that timed out.
+- Both sides journal every decision, including the ones that timed out. Clipboard contents are
+  the one thing that crosses the link and is never written down — not to the journal, not to
+  either log, which record that a clip moved and how big it was.
+- A clip marked concealed or transient by the app that produced it is never sent. That marking
+  is how a password manager says "not this one", and a shared clipboard that ignored it would
+  be a credential exfiltration channel with a friendly name.
 - A bridge can be taken away. **Manage** on the dashboard lists what is paired and forgets one
   after asking; forgetting drops the live link on the spot rather than waiting for it to end,
   because the session keys were derived at handshake time and outlive the keyring entry they

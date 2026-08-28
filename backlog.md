@@ -35,6 +35,48 @@ Supporting both hosts would have required:
 
 Nordic UART Service UUIDs are kept anyway, so the door stays open at zero cost.
 
+## Shared clipboard
+
+Shipped for text. What was looked at and left out, so it is not rediscovered:
+
+- **Automatic phone-to-Mac with no gesture at all: not possible.** From Android 10 the clipboard
+  may be read only by the app with focus or by the default input method.
+  `READ_CLIPBOARD_IN_BACKGROUND` exists for exactly this and is `signature`, so it is reachable
+  only by a platform-signed app — `pm grant` does not help, and neither does a foreground
+  service, which is not focus. The alternatives are writing a keyboard or holding an
+  accessibility service, and either one is a far larger privilege than the feature is worth.
+  What ships instead: automatic while the dashboard has focus, plus an `ACTION_SEND` target so
+  the gesture is Share rather than "switch apps first".
+- **Images and files: dropped.** The link moves a couple of kilobytes a second and the line cap
+  is 8 KiB. A screenshot is three orders of magnitude out, and a chunked transfer for it would
+  be the `char_begin`/`chunk`/`file_end` machinery already rejected above, for a payload nobody
+  asked for.
+- **History of clips: dropped.** One slot each way, replaced in place. A list would be a file of
+  everything copied on a work machine sitting on a phone, which is the thing the concealed-type
+  filter exists to avoid — building it deliberately at one remove is not better.
+- **`EXTRA_IS_SENSITIVE` on arriving clips: not set.** It replaces the content of Android's paste
+  confirmation with "Content hidden", and that confirmation is the only sign the phone gives
+  that a clip arrived. What would justify hiding it never arrives: the Mac refuses to send
+  anything marked concealed.
+- **Negotiating the two off-switches: no.** `--no-clipboard` on the bridge and the phone's toggle
+  are independent, so a bridge with mirroring on goes on sending clips to a phone that drops
+  them. Wasteful by a few hundred bytes over an encrypted link, and the alternative is one
+  device being able to overrule the other's decision to opt out.
+
+Left for later, in rough order of how much they would be missed:
+
+- **Pushing the current pasteboard on connect.** Rejected for now: a reconnect happens on every
+  app update, reboot and walk out of range, and each one would overwrite the phone's clipboard
+  with whatever the Mac last had. A clip copied while the phone was away is simply lost, which
+  is what a clipboard does anyway.
+- **A `cmbridge copy` / `cmbridge paste` pair**, for scripting and for the case where the grant
+  is denied. The HTTP server on 8787 already has the shape for it — a `/clip` route next to the
+  hook endpoints — and it would give the Mac half a path that needs no pasteboard read at all.
+- **Saying on the phone that the Mac's grant is missing.** The bridge knows
+  (`NSPasteboard.accessBehavior`) and only writes it to its own log at startup, so the symptom
+  on the phone is a clipboard that never changes and never says why. It would need a field in
+  `Snapshot`, which is the three-files-at-once rule.
+
 ## Protocol extensions
 
 - Multiple hosts connected simultaneously. The keyring already stores several hosts and the
@@ -286,6 +328,45 @@ Two rules apply to all of them:
   *Done when:* an Edit request on the phone shows the file, the line delta and a glimpse of
   the new text; the stale-card clearing on `PostToolUse` still works for Edit and Write
   (covered by a `QueueTests` case).
+
+- **Tapping a request to read all of it.** The command on screen is cut off and there is no way
+  to see the rest. Deciding on a command you can only see the first six lines of is the one
+  thing this screen exists to prevent, and `rm -rf` is at its most interesting past the
+  ellipsis.
+
+  It is two truncations with the same symptom, and they cost very different amounts:
+
+  1. **On screen.** `Bubble()` draws `hint` at `maxLines = 6`, or 3 for a queued one, with
+     `TextOverflow.Ellipsis`. The phone is already holding the whole 512 bytes — nothing is
+     missing, it is only not drawn. Tapping to expand costs no wire change at all and fixes
+     every request whose command is under the limit, which is nearly all of them.
+  2. **On the wire.** `Prompt.hintLimit` cuts `hint` to 512 bytes and `whyLimit` cuts `why` to
+     160, in `Prompt.truncatingHint` on the bridge, before either leaves the Mac. Past that the
+     phone never received the text and no amount of tapping will produce it.
+
+  Do (1) first and alone. It is most of the value, and it is the half that can ship without
+  touching the protocol.
+
+  *Where (1):* `DashboardScreen.kt` `Bubble()` — a `var expanded by remember(front.id)`,
+  `Modifier.clickable` on the `Surface`, `maxLines = if (expanded) Int.MAX_VALUE else …`.
+  Reset per request id, so the next one does not arrive already unrolled. The bubble is inside
+  a `verticalScroll`, so a long one scrolls rather than pushing the rail off screen — worth
+  checking in the wide layout, where the rail is a separate column and does not move. The
+  notification is already ahead of the screen here: `Notifications.approval` uses
+  `BigTextStyle` with `why`, `hint` and `cwd` in full, so the shade shows more than the app.
+  *Wire (1):* none.
+  *Done when:* tapping a bubble shows the whole hint and tapping again folds it back; a queued
+  bubble expands too; answering and being handed the next request draws it folded.
+
+  *Where (2):* `Protocol.swift` / `Protocol.kt` `hintLimit`. Raising it is one number, and the
+  8 KiB line cap is the real ceiling — a snapshot carries the head plus everything queued, so
+  the budget is per queue, not per prompt, and `Clip` has already spent the headroom arithmetic
+  once (see the clip section in `PROTOCOL.md`). Sending the full command only for the request
+  being expanded, on request from the phone, is the version that does not blow the cap; that
+  needs a new message in both directions and is a bigger job than it first looks.
+  *Wire (2):* `hint` grows, or a `{"t":"full","id":…}` request and its answer.
+  *Done when:* a command longer than 512 bytes can be read to the end on the phone, and a queue
+  of several long requests still fits in one snapshot.
 
 ### Looked at and left alone
 

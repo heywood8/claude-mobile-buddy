@@ -37,6 +37,12 @@ final class FakeLink: LinkSink, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return _lines.count
     }
+
+    /// The raw last line, for the messages that are not snapshots.
+    var lastLine: Data? {
+        lock.lock(); defer { lock.unlock() }
+        return _lines.last
+    }
 }
 
 @Suite("Approval queue")
