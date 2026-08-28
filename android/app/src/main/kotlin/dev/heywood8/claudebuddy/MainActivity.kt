@@ -164,6 +164,37 @@ class MainActivity : ComponentActivity() {
         BuddyState.setForeground(false)
     }
 
+    /**
+     * The window this app reads the clipboard through.
+     *
+     * Focus, and not merely being resumed, is the exact condition Android gates the clipboard
+     * on — so it is the exact condition the listener lives under. In split screen the two come
+     * apart, and a listener attached to the wrong one would sit there receiving nothing and
+     * looking installed.
+     *
+     * Regaining focus captures once as well as subscribing: whatever was copied while the
+     * dashboard was away produced a change nobody was listening for, and coming back to the
+     * app is the first moment it can be sent. Which makes opening the app the gesture for
+     * "send that to the Mac" — the share sheet being the one that does not need opening.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        val manager = getSystemService(android.content.ClipboardManager::class.java) ?: return
+        if (hasFocus && !watchingClipboard) {
+            watchingClipboard = true
+            manager.addPrimaryClipChangedListener(clipListener)
+            Clipboard.capture(this)
+        } else if (!hasFocus && watchingClipboard) {
+            watchingClipboard = false
+            manager.removePrimaryClipChangedListener(clipListener)
+        }
+    }
+
+    private var watchingClipboard = false
+
+    private val clipListener =
+        android.content.ClipboardManager.OnPrimaryClipChangedListener { Clipboard.capture(this) }
+
     private fun requestAndStart() {
         linkPermissions.launch(
             arrayOf(

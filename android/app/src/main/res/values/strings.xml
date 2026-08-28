@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Claude Buddy</string>
+    <!-- What the share sheet calls the entry. Names the destination rather than the app,
+         because that is the choice being made in a list of a dozen icons. -->
+    <string name="share_label">Send to the Mac</string>
 </resources>

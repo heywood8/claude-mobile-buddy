@@ -3,6 +3,11 @@ package dev.heywood8.claudebuddy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.util.Base64
 import java.util.UUID
 
 /** Nordic UART Service, as specified in docs/PROTOCOL.md. */
@@ -136,6 +141,84 @@ data class Decision(
     val decision: Verdict,
 )
 
+/**
+ * A clipboard hand-off, in either direction.
+ *
+ * Symmetric on purpose, and carrying `t` rather than the maker specification's `cmd`: nothing
+ * in that specification describes a clipboard, so there is no verb to follow, and inventing one
+ * for this end alone would leave the two halves of a single feature looking unrelated.
+ *
+ * The text travels base64 rather than as a JSON string. JSON escaping expands a control
+ * character to six bytes, so a clip of the wrong shape would push the sealed line past
+ * [Wire.MAX_LINE] — which does not fail politely: [LineAssembler] drops the oversized line,
+ * whatever follows the newline decrypts as garbage, and the session ends. Base64 is a flat four
+ * thirds, so [TEXT_LIMIT] is provably under the cap rather than measured to be.
+ */
+@Serializable
+data class Clip(
+    val t: String = "clip",
+    /** base64 of the UTF-8 text. */
+    val b: String = "",
+    /** The sender's own clock when it was copied. Display only. */
+    val at: Long = 0,
+) {
+    /**
+     * Null for a peer that sent something that is not base64, or not UTF-8 inside it.
+     *
+     * Decoded strictly, which `String(bytes, UTF_8)` is not: that substitutes U+FFFD for every
+     * byte it cannot read and hands back a string, so a corrupted frame would arrive as a
+     * clipboard full of replacement characters rather than as nothing. The bridge's
+     * `String(data:encoding:)` refuses outright, and the two ends have to agree about what a
+     * malformed clip means.
+     */
+    val text: String?
+        get() = runCatching {
+            val bytes = Base64.getDecoder().decode(b)
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        }.getOrNull()
+
+    companion object {
+        /**
+         * Bytes of UTF-8 text.
+         *
+         * Worked out backwards from the 8 KiB line cap: 22 bytes of frame envelope, a 16-byte
+         * tag, base64 at four thirds and 35 bytes of this object's own JSON leave room for
+         * 4554 bytes of text. 4096 keeps roughly 450 in hand.
+         */
+        const val TEXT_LIMIT = 4096
+
+        fun of(text: String, at: Long): Clip =
+            Clip(b = Base64.getEncoder().encodeToString(clamp(text)), at = at)
+
+        /**
+         * Cuts on a byte budget, backing off to a character boundary.
+         *
+         * Truncated silently and without an ellipsis, unlike `hint`: a clipboard is pasted
+         * rather than read, and a marker glued to the end would be pasted too.
+         */
+        private fun clamp(text: String): ByteArray {
+            val bytes = text.toByteArray(Charsets.UTF_8)
+            if (bytes.size <= TEXT_LIMIT) return bytes
+            // A continuation byte is 10xxxxxx. Cutting on one splits a character, and the far
+            // end decodes the whole clip to null rather than to something slightly short.
+            var end = TEXT_LIMIT
+            while (end > 0 && (bytes[end].toInt() and 0xC0) == 0x80) end--
+            return bytes.copyOf(end)
+        }
+    }
+}
+
+/** Anything the bridge can send us. */
+sealed interface Inbound {
+    data class Snap(val snapshot: Snapshot) : Inbound
+
+    data class Clipboard(val clip: Clip) : Inbound
+}
+
 object Wire {
     const val MAX_LINE = 8 * 1024
 
@@ -158,16 +241,37 @@ object Wire {
     fun encodePayload(decision: Decision): ByteArray =
         json.encodeToString(decision).toByteArray(Charsets.UTF_8)
 
+    fun encodePayload(clip: Clip): ByteArray =
+        json.encodeToString(clip).toByteArray(Charsets.UTF_8)
+
     /**
      * Returns null for anything we do not recognise. An unfamiliar line is not worth tearing
      * the link down for — the bridge may simply be newer than we are.
+     *
+     * Dispatched on `t` rather than by trying each type in turn: [Snapshot] defaults every
+     * field, so it decodes happily from any object at all and would swallow every message
+     * added after it.
      */
-    fun decodeSnapshot(line: ByteArray): Snapshot? {
+    fun decodeInbound(line: ByteArray): Inbound? {
         if (line.size > MAX_LINE) return null
-        return runCatching { json.decodeFromString<Snapshot>(String(line, Charsets.UTF_8)) }
-            .getOrNull()
-            ?.takeIf { it.t == "snap" }
+        val text = String(line, Charsets.UTF_8)
+        val tag = runCatching {
+            json.parseToJsonElement(text).jsonObject["t"]?.jsonPrimitive?.content
+        }.getOrNull()
+        return when (tag) {
+            "snap" -> runCatching { json.decodeFromString<Snapshot>(text) }
+                .getOrNull()?.let(Inbound::Snap)
+
+            "clip" -> runCatching { json.decodeFromString<Clip>(text) }
+                .getOrNull()?.let(Inbound::Clipboard)
+
+            else -> null
+        }
     }
+
+    /** The snapshot alone, for the golden-vector tests. */
+    fun decodeSnapshot(line: ByteArray): Snapshot? =
+        (decodeInbound(line) as? Inbound.Snap)?.snapshot
 }
 
 /**

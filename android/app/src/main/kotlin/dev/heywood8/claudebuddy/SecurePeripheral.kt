@@ -16,6 +16,7 @@ class SecurePeripheral(
     private val context: Context,
     private val deviceName: String,
     private val onSnapshot: (Snapshot) -> Unit,
+    private val onClip: (Clip) -> Unit,
     private val onReadyChange: (Boolean) -> Unit,
 ) {
     private var session: PhoneSession? = null
@@ -85,6 +86,16 @@ class SecurePeripheral(
         transport?.send(sealed)
     }
 
+    /** Never logs the text, only that there was some. */
+    fun send(clip: Clip) {
+        val sealed = session?.seal(Wire.encodePayload(clip))
+        if (sealed == null) {
+            Log.w(TAG, "cannot send a clip: no ready session")
+            return
+        }
+        transport?.send(sealed)
+    }
+
     // MARK: - Session plumbing
 
     private fun onTransportChange(connected: Boolean) {
@@ -113,8 +124,14 @@ class SecurePeripheral(
                     linkedHostId = session.host?.hostId
                     setReady(true)
                 }
-                is SessionOutput.Message ->
-                    Wire.decodeSnapshot(output.plaintext)?.let(onSnapshot)
+                is SessionOutput.Message -> when (val inbound =
+                    Wire.decodeInbound(output.plaintext)) {
+                    is Inbound.Snap -> onSnapshot(inbound.snapshot)
+                    is Inbound.Clipboard -> onClip(inbound.clip)
+                    // A line we do not recognise is not worth tearing the link down for: the
+                    // bridge may simply be newer than we are.
+                    null -> Unit
+                }
                 is SessionOutput.Close -> {
                     Log.i(TAG, "session over: ${output.reason}")
                     setReady(false)

@@ -45,6 +45,26 @@ object BuddyState {
     @Volatile
     var sink: ((Decision, String) -> Unit)? = null
 
+    /**
+     * Set by the service while it holds the link.
+     *
+     * Separate from [sink] because the two have different callers: a decision comes from the
+     * screen or the notification, a clip from the share sheet or from whatever had focus when
+     * the clipboard moved.
+     */
+    @Volatile
+    var clipSink: ((Clip) -> Unit)? = null
+
+    /**
+     * That a clip crossed, and which way. Never what it said.
+     *
+     * The dashboard is a thing you hold up in a room with other people in it, and the point of
+     * the line is that the clipboard changed under you — which the size and the direction
+     * answer, and the text would only answer louder.
+     */
+    var lastClip by mutableStateOf<ClipNote?>(null)
+        private set
+
     /** Set by the service while it holds the link. */
     @Volatile
     var onRevoke: ((String) -> Unit)? = null
@@ -95,6 +115,17 @@ object BuddyState {
         main.post { lastAnswer = Answer(id, session, verdict, at) }
         return true
     }
+
+    fun noteClip(fromPhone: Boolean, chars: Int) = main.post {
+        lastClip = ClipNote(fromPhone, chars, System.currentTimeMillis() / 1000)
+    }
+
+    /** [at] is this phone's clock: both ends of a clip are equally ours to time. */
+    data class ClipNote(
+        val fromPhone: Boolean,
+        val chars: Int,
+        val at: Long,
+    )
 
     /** Holds a tap that had nowhere to go. A newer one replaces it: the head of the queue moved. */
     fun defer(id: String, verdict: Verdict) {

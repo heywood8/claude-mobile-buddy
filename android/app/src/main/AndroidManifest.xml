@@ -37,6 +37,23 @@
             </intent-filter>
         </activity>
 
+        <!-- The share sheet is how text reaches the Mac once the dashboard is off screen:
+             Android only lets the focused app read the clipboard, and an intent hands us the
+             text directly, so nothing is read at all. No window; it finishes in onCreate. -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:label="@string/share_label"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".BuddyService"
             android:exported="false"

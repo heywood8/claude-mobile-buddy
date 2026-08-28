@@ -277,6 +277,20 @@ private fun Status() {
         }
         Text(line, style = MaterialTheme.typography.bodySmall)
     }
+    // That the clipboard moved under you, and which way. Never what it said — this screen gets
+    // held up in rooms with other people in it, and the size answers the only question a line
+    // here can usefully answer. Timed by this phone: a clip is the one message each end
+    // originates, so there is no host frame to work it out in.
+    val clip = BuddyState.lastClip
+    if (clip != null) {
+        Text(
+            ago(
+                if (clip.fromPhone) "clipboard sent" else "clipboard arrived",
+                System.currentTimeMillis() / 1000 - clip.at,
+            ) + " · ${clip.chars} characters",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 /**
@@ -663,6 +677,33 @@ private fun Controls(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+        }
+    }
+
+    var clipboard by remember { mutableStateOf(Settings.clipboardEnabled(context)) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Switch(
+            checked = clipboard,
+            onCheckedChange = {
+                clipboard = it
+                Settings.setClipboardEnabled(context, it)
+            },
+        )
+        Column {
+            Text("Share the clipboard", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (clipboard) {
+                    // The asymmetry is the platform's, not a setting, so it is stated here
+                    // rather than left to be discovered as a bug.
+                    "Copying on the Mac lands here. This way needs the app open, or Share."
+                } else {
+                    "Nothing is read here and nothing arriving is applied."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 
