@@ -465,13 +465,30 @@ private fun Bubble(asks: List<Prompt>, role: BubbleRole) {
         BubbleRole.ANSWERING -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
+    // Folded by default and unfolded by a tap, remembered per request so the next one does not
+    // arrive already open. `clipped` is what the last layout actually did rather than a guess
+    // from the text's length — a wrapped line depends on the width, and this screen has two
+    // layouts. It is only ever set while folded, so it stays true once open and the tap that
+    // folds it back has something to hang on.
+    var expanded by remember(front.id) { mutableStateOf(false) }
+    var clipped by remember(front.id) { mutableStateOf(false) }
+
     Row(verticalAlignment = Alignment.Top) {
         BubbleTail(bubble, Modifier.padding(top = 10.dp))
         Column(Modifier.weight(1f)) {
             Surface(
                 color = bubble,
                 shape = RoundedCornerShape(6.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Nothing to open, nothing to tap. A command that fits is not a control.
+                    .then(
+                        if (clipped) {
+                            Modifier.clickable { expanded = !expanded }
+                        } else {
+                            Modifier
+                        }
+                    ),
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Can I run ${front.tool}?", style = MaterialTheme.typography.titleMedium)
@@ -482,17 +499,38 @@ private fun Bubble(asks: List<Prompt>, role: BubbleRole) {
                     if (front.why.isNotEmpty()) {
                         Text(front.why, style = MaterialTheme.typography.bodyMedium)
                     }
-                    // The bridge already trims this to 512 bytes, which is still a screenful of
-                    // shell. Six lines is enough to recognise a command; the rest is in the
-                    // terminal that wrote it, and a bubble that fills the display pushes the
-                    // buttons off the bottom. A queued one gets fewer still — it is not the
-                    // question in front of you yet.
+                    // Six lines is enough to recognise a command, and a bubble that fills the
+                    // display pushes the buttons off the bottom. A queued one gets fewer still
+                    // — it is not the question in front of you yet. But deciding on a command
+                    // you can only see the first six lines of is the thing this screen exists
+                    // to prevent, so the rest is one tap away rather than absent.
                     Text(
                         front.hint,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (role == BubbleRole.QUEUED) 3 else 6,
+                        maxLines = if (expanded) Int.MAX_VALUE else {
+                            if (role == BubbleRole.QUEUED) 3 else 6
+                        },
                         overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { if (!expanded) clipped = it.hasVisualOverflow },
                     )
+                    if (clipped) {
+                        Text(
+                            if (expanded) "Tap to fold" else "Tap to read the rest",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    // The bridge cuts the command to 512 bytes before it ever leaves the Mac
+                    // and marks the cut with an ellipsis, so "expanded" is not the same as
+                    // "all of it". Said only when open, because folded it would be a second
+                    // caveat on top of a first. A command genuinely ending in an ellipsis
+                    // would say this wrongly; that is cheaper than staying quiet about a
+                    // truncation the reader cannot otherwise see.
+                    if (expanded && front.hint.endsWith("…")) {
+                        Text(
+                            "Cut short on the way here — the whole command is in the terminal.",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                     if (role == BubbleRole.STANDALONE) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = {
