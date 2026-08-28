@@ -147,6 +147,29 @@ struct ClipboardTests {
         #expect(board.changeCount == count, "rewrote the pasteboard with what was on it")
     }
 
+    /// An overlong clip is truncated on the way out, so the phone holds something shorter than
+    /// this pasteboard does. The mirror has to be the shorter one: otherwise the phone sending
+    /// its clipboard back offers a string that compares unequal to the original, and the longer
+    /// text on this Mac is replaced by the clamped copy of itself.
+    @Test("does not let a truncated clip come home and overwrite the original")
+    func doesNotLetTruncationRoundTrip() throws {
+        let (link, mirror, board) = harness()
+        let long = String(repeating: "я", count: Clip.textLimit)  // two bytes each, so overlong
+
+        board.clearContents()
+        board.setString(long, forType: .string)
+        mirror.poll()
+        let sent = try #require(clip(from: link)?.text)
+        #expect(sent.utf8.count < long.utf8.count, "the fixture is not actually overlong")
+
+        // The phone now holds `sent`, and sending it back must be recognised as the same clip.
+        let before = board.changeCount
+        mirror.receive(Clip.of(sent, at: 0))
+        mirror.settle()
+        #expect(board.changeCount == before, "the truncated clip overwrote the full original")
+        #expect(board.string(forType: .string) == long)
+    }
+
     @Test("never sends a clip a password manager marked concealed")
     func skipsConcealedClips() {
         for marker in PasteboardMirror.concealed {

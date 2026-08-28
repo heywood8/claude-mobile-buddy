@@ -41,7 +41,52 @@ object Notifications {
             .setContentTitle(if (linked) "Bridge connected" else "Waiting for the bridge")
             .setOngoing(true)
             .setContentIntent(openApp(context))
+            // Only while there is something to send it to. An action that cannot work is the
+            // control that teaches you to stop reading the row — the same argument the
+            // dashboard's button row already makes.
+            //
+            // The switch is read here rather than watched: turning the shared clipboard off
+            // leaves this action in the shade until the link next changes, and tapping it then
+            // says "Shared clipboard is off" rather than pretending. Honest, and it costs no
+            // plumbing from the settings sheet down into the service.
+            .apply {
+                if (linked && Settings.clipboardEnabled(context)) {
+                    addAction(sendClipboard(context))
+                }
+            }
             .build()
+
+    /**
+     * The one gesture that gets text off this phone without leaving the app you are in.
+     *
+     * Points at an activity rather than a receiver, and that is the entire design: only the
+     * focused app may read the clipboard on Android 10 and later, a receiver has no window and
+     * would be refused, and an activity has one. See [CaptureActivity].
+     */
+    private fun sendClipboard(context: Context): Notification.Action {
+        val intent = Intent()
+            .setClass(context, CaptureActivity::class.java)
+            // Its own task, thrown away afterwards: this is launched from the shade while you
+            // are somewhere else entirely, and it must not land on top of that app's back stack.
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pending = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return Notification.Action.Builder(
+            android.graphics.drawable.Icon.createWithResource(
+                context, android.R.drawable.ic_menu_upload),
+            "Send clipboard",
+            pending,
+        )
+            // Free in the ordinary case — the phone is already unlocked when you have just
+            // copied something — and it keeps a locked phone in a pocket from posting whatever
+            // was last copied to a workstation on the strength of one blind tap.
+            .setAuthenticationRequired(true)
+            .build()
+    }
 
     /**
      * Whether a full-screen intent would do anything.

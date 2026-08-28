@@ -20,6 +20,28 @@ import android.os.ParcelUuid
 import android.util.Log
 
 /**
+ * How large one GATT notification may be. Kept out of [GattPeripheral] so it can be tested
+ * without a radio — the rule is arithmetic, and getting it wrong crashed the process.
+ */
+internal object Att {
+    const val HEADER = 3
+    const val MIN_CHUNK = 20
+
+    /**
+     * The largest an ATT attribute value may be, and so the largest a single notification may
+     * be, no matter what MTU was negotiated. Bluetooth Core, Vol 3, Part F.
+     */
+    const val MAX_ATTRIBUTE = 512
+
+    /**
+     * Two ceilings, and the MTU is only one of them. A negotiated 517 makes `mtu - 3` come out
+     * at 514, two over the attribute limit — and `notifyCharacteristicChanged` does not clamp
+     * or refuse politely, it throws on the GATT thread and takes the process with it.
+     */
+    fun chunk(mtu: Int): Int = (mtu - HEADER).coerceIn(MIN_CHUNK, MAX_ATTRIBUTE)
+}
+
+/**
  * The peripheral half of the link: advertises the service, serves the GATT characteristics,
  * and moves newline-delimited lines in both directions.
  *
@@ -133,7 +155,16 @@ class GattPeripheral(
     fun send(line: ByteArray) = onWorker {
         val peer = peer ?: return@onWorker
         val tx = tx ?: return@onWorker
-        val limit = (mtu - GATT_HEADER).coerceAtLeast(MIN_CHUNK)
+        // Two ceilings, and the MTU is only one of them. An ATT attribute value is 512 bytes
+        // at most however large the MTU gets, and a negotiated 517 makes `mtu - 3` come out at
+        // 514 — over by two. `notifyCharacteristicChanged` does not clamp or refuse politely:
+        // it throws IllegalArgumentException on the GATT thread, which takes the process, the
+        // foreground service and the link with it.
+        //
+        // Nothing hit this until the clipboard existed. Every line the phone had ever sent was
+        // a Decision of about sixty bytes — one chunk, never near the ceiling — so the first
+        // multi-chunk line was also the first crash.
+        val limit = Att.chunk(mtu)
         var offset = 0
         while (offset < line.size) {
             val end = minOf(offset + limit, line.size)
@@ -146,16 +177,29 @@ class GattPeripheral(
     /** Only ever called on [handler]. */
     private fun pump(device: BluetoothDevice, characteristic: BluetoothGattCharacteristic) {
         if (notifyInFlight) return
+        // Read before the flag is set. Taken afterwards, a null server left `notifyInFlight`
+        // true with nothing on its way to clear it, and the queue never moved again.
+        val server = server ?: return
         val chunk = outbox.removeFirstOrNull() ?: return
         notifyInFlight = true
-        val server = server ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            server.notifyCharacteristicChanged(device, characteristic, false, chunk)
-        } else {
-            @Suppress("DEPRECATION")
-            characteristic.value = chunk
-            @Suppress("DEPRECATION")
-            server.notifyCharacteristicChanged(device, characteristic, false)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                server.notifyCharacteristicChanged(device, characteristic, false, chunk)
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.value = chunk
+                @Suppress("DEPRECATION")
+                server.notifyCharacteristicChanged(device, characteristic, false)
+            }
+        } catch (e: IllegalArgumentException) {
+            // The chunking above is what keeps this from happening, and it is worth surviving
+            // anyway: this runs on the GATT thread, where an escaping exception is not an error
+            // to recover from but the end of the process. Losing the link costs a reconnect;
+            // losing the process costs every queued approval.
+            Log.e(TAG, "notification refused, dropping the peer", e)
+            notifyInFlight = false
+            outbox.clear()
+            server.cancelConnection(device)
         }
     }
 
@@ -257,7 +301,5 @@ class GattPeripheral(
     private companion object {
         const val TAG = "GattPeripheral"
         const val DEFAULT_MTU = 23
-        const val GATT_HEADER = 3
-        const val MIN_CHUNK = 20
     }
 }

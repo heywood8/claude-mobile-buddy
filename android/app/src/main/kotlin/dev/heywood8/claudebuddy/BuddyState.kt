@@ -49,11 +49,15 @@ object BuddyState {
      * Set by the service while it holds the link.
      *
      * Separate from [sink] because the two have different callers: a decision comes from the
-     * screen or the notification, a clip from the share sheet or from whatever had focus when
-     * the clipboard moved.
+     * screen or the notification, a clip from the share sheet, the shade, or whatever had focus
+     * when the clipboard moved.
+     *
+     * Returns whether the clip actually left, for the same reason [answer] does: this is
+     * attached for the whole life of the service, while the handshake comes and goes
+     * underneath it, so its mere presence says nothing about whether anything can be sent.
      */
     @Volatile
-    var clipSink: ((Clip) -> Unit)? = null
+    var clipSink: ((Clip) -> Boolean)? = null
 
     /**
      * That a clip crossed, and which way. Never what it said.

@@ -110,15 +110,27 @@ final class PasteboardMirror: @unchecked Sendable {
         // same text again once the phone is back look like something already agreed on, and it
         // would never cross.
         guard link.isLinked else { return }
-        mirror = text
         send(text)
     }
 
     private func send(_ text: String) {
         let clip = Clip.of(text, at: Int(Date().timeIntervalSince1970))
-        guard let payload = try? LineCodec.payload(clip) else { return }
+
+        // The mirror is what the *phone* will hold, which is the clamped text — not what is on
+        // this pasteboard. Setting it to the full text is a silent way to lose data: anything
+        // over the limit arrives truncated, and the moment the phone sends its clipboard back
+        // that shorter string compares unequal to the original and overwrites it. Measured
+        // exactly once, on a 4909-byte clip that came home 4095 bytes long.
+        mirror = clip.text ?? text
+
         // Never the text itself: this log goes to a file that lives in ~/Library/Logs.
-        log.info("clipboard: sending \(text.utf8.count) bytes to the phone")
+        let sent = clip.text?.utf8.count ?? 0
+        if sent < text.utf8.count {
+            log.info("clipboard: sending \(sent) of \(text.utf8.count) bytes to the phone")
+        } else {
+            log.info("clipboard: sending \(sent) bytes to the phone")
+        }
+        guard let payload = try? LineCodec.payload(clip) else { return }
         link.send(payload)
     }
 

@@ -64,7 +64,7 @@ class BuddyService : Service() {
         // No journal entry, on purpose. The journal is a record of what you let run, exported
         // to a file you can hand to someone; clipboard contents are neither, and writing them
         // there would put whatever you copied today into a document meant to be shareable.
-        BuddyState.clipSink = { peripheral.send(it) }
+        BuddyState.clipSink = peripheral::send
         BuddyState.onRevoke = { hostId ->
             peripheral.revoke(hostId)
             // Advertising with an empty keyring can only ever end in unknown_host, so the

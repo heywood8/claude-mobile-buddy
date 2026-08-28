@@ -26,18 +26,17 @@ class ShareActivity : Activity() {
             ?.toString()
             .orEmpty()
 
-        val message = when {
-            text.isEmpty() -> "Nothing to send"
-            !Settings.clipboardEnabled(this) -> "Shared clipboard is off"
-            // Deliberately not deferred the way a tapped verdict is. A decision is answering a
-            // question the bridge is still holding open, so late is better than never; a clip
-            // answers nothing, and one delivered when the link came back would overwrite the
-            // Mac's pasteboard minutes later for no reason anybody could reconstruct.
-            !Clipboard.share(this, text) -> "Not connected to the bridge"
-            text.toByteArray().size > Clip.TEXT_LIMIT ->
-                "Sent the first ${Clip.TEXT_LIMIT / 1024} KB"
-
-            else -> "Sent to the Mac"
+        // Deliberately not deferred the way a tapped verdict is. A decision is answering a
+        // question the bridge is still holding open, so late is better than never; a clip
+        // answers nothing, and one delivered when the link came back would overwrite the Mac's
+        // pasteboard minutes later for no reason anybody could reconstruct.
+        val outcome = Clipboard.share(this, text)
+        val message = if (
+            outcome == Clipboard.Outcome.SENT && text.toByteArray().size > Clip.TEXT_LIMIT
+        ) {
+            "Sent the first ${Clip.TEXT_LIMIT / 1024} KB"
+        } else {
+            outcome.message
         }
 
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

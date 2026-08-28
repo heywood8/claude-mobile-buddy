@@ -86,6 +86,22 @@ class ClipboardTest {
     }
 
     /**
+     * Every outcome reaches a person as a toast, from a button they tapped once, so each one
+     * has to say a different and non-empty thing. The compiler makes the `when` exhaustive; it
+     * has nothing to say about two branches quietly sharing a sentence.
+     */
+    @Test
+    fun `every outcome says something, and says something different`() {
+        val messages = Clipboard.Outcome.entries.map { it.message }
+        assertTrue("an outcome has no message", messages.all { it.isNotBlank() })
+        assertEquals(
+            "two outcomes share a message",
+            Clipboard.Outcome.entries.size,
+            messages.toSet().size,
+        )
+    }
+
+    /**
      * The reason the text travels base64 at all.
      *
      * As a JSON string, a control character costs six bytes rather than one, so a clip of the
