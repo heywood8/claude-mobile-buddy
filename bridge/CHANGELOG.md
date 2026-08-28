@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.7.0...bridge-v0.7.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **android:** a clipboard line longer than one chunk crashed the phone ([#11](https://github.com/heywood8/claude-mobile-buddy/issues/11)) ([67a36f3](https://github.com/heywood8/claude-mobile-buddy/commit/67a36f34ed99a086902bb0b3c98f60d396ff55b2))
+
 ## [0.7.0](https://github.com/heywood8/claude-mobile-buddy/compare/bridge-v0.6.0...bridge-v0.7.0) (2026-08-28)
 
 
