@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.6.1...android-v0.7.0) (2026-08-28)
+
+
+### Features
+
+* **protocol:** a shared clipboard between the Mac and the phone ([#9](https://github.com/heywood8/claude-mobile-buddy/issues/9)) ([1132b86](https://github.com/heywood8/claude-mobile-buddy/commit/1132b86b564c288b60899efb4cc86109669d356b))
+
 ## [0.6.1](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.6.0...android-v0.6.1) (2026-08-27)
 
 
