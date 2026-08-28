@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.7.1...android-v0.8.0) (2026-08-28)
+
+
+### Features
+
+* **android:** tap a request to read the whole command ([#13](https://github.com/heywood8/claude-mobile-buddy/issues/13)) ([ad6e98f](https://github.com/heywood8/claude-mobile-buddy/commit/ad6e98ffa91fa8df83f2938757c7882ea1563ba3))
+
 ## [0.7.1](https://github.com/heywood8/claude-mobile-buddy/compare/android-v0.7.0...android-v0.7.1) (2026-08-28)
 
 
